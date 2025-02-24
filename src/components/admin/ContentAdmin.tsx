@@ -3,8 +3,95 @@ import { Button } from "@/components/ui/button";
 import { isAuthorized } from "@/lib/adminAuth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AboutUsEditor from "./content/AboutUsEditor";
+import NewsEditor from "./content/NewsEditor";
+import AcademicEditor from "./content/AcademicEditor";
+import CourseEditor from "./content/CourseEditor";
 
 const ContentAdmin = () => {
+  const [courses, setCourses] = React.useState<any[]>([]);
+  const [content, setContent] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    fetchCourses();
+    fetchContent();
+  }, []);
+
+  const fetchCourses = async () => {
+    const { data, error } = await supabase
+      .from("courses")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching courses:", error);
+      return;
+    }
+
+    setCourses(data);
+  };
+
+  const fetchContent = async () => {
+    const { data, error } = await supabase
+      .from("content")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching content:", error);
+      return;
+    }
+
+    setContent(data);
+  };
+
+  const updateContent = async (type: string, content: any) => {
+    const { error } = await supabase.from("content").upsert({
+      type,
+      content,
+      title:
+        type === "about" ? "About Us" : type === "news" ? "News" : "Academic",
+    });
+
+    if (error) {
+      console.error("Error updating content:", error);
+      return;
+    }
+
+    fetchContent();
+  };
+
+  const addCourse = async (
+    type: "btech" | "mtech" | "phd",
+    name: string,
+    description: string,
+  ) => {
+    const { error } = await supabase.from("courses").insert({
+      type,
+      name,
+      description,
+    });
+
+    if (error) {
+      console.error("Error adding course:", error);
+      return;
+    }
+
+    fetchCourses();
+  };
+
+  const updateCourse = async (id: string, updates: any) => {
+    const { error } = await supabase
+      .from("courses")
+      .update(updates)
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error updating course:", error);
+      return;
+    }
+
+    fetchCourses();
+  };
   const adminEmail = localStorage.getItem("adminEmail");
   const adminRole = localStorage.getItem("adminRole");
 
@@ -42,95 +129,15 @@ const ContentAdmin = () => {
           </TabsContent>
 
           <TabsContent value="news" className="mt-0">
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h2 className="text-xl font-semibold mb-4">
-                News & Announcements
-              </h2>
-              {/* News Editor Component */}
-            </div>
+            <NewsEditor />
           </TabsContent>
 
           <TabsContent value="academic" className="mt-0">
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h2 className="text-xl font-semibold mb-4">Academic Content</h2>
-              {/* Academic Content Editor */}
-            </div>
+            <AcademicEditor />
           </TabsContent>
 
           <TabsContent value="courses" className="mt-0">
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h2 className="text-xl font-semibold mb-4">Course Management</h2>
-              <div className="space-y-6">
-                <div className="border rounded-lg p-4">
-                  <h3 className="text-lg font-medium mb-4">B.Tech Programs</h3>
-                  <ul className="space-y-4">
-                    <li className="flex items-center justify-between">
-                      <span>Computer Science and Engineering</span>
-                      <Button variant="outline" size="sm">
-                        Edit
-                      </Button>
-                    </li>
-                    <li className="flex items-center justify-between">
-                      <span>Electronics and Communication Engineering</span>
-                      <Button variant="outline" size="sm">
-                        Edit
-                      </Button>
-                    </li>
-                    <li className="flex items-center justify-between">
-                      <span>Mechanical Engineering</span>
-                      <Button variant="outline" size="sm">
-                        Edit
-                      </Button>
-                    </li>
-                  </ul>
-                  <Button className="mt-4" variant="outline">
-                    Add B.Tech Program
-                  </Button>
-                </div>
-
-                <div className="border rounded-lg p-4">
-                  <h3 className="text-lg font-medium mb-4">M.Tech Programs</h3>
-                  <ul className="space-y-4">
-                    <li className="flex items-center justify-between">
-                      <span>Data Science and AI</span>
-                      <Button variant="outline" size="sm">
-                        Edit
-                      </Button>
-                    </li>
-                    <li className="flex items-center justify-between">
-                      <span>Communication Systems</span>
-                      <Button variant="outline" size="sm">
-                        Edit
-                      </Button>
-                    </li>
-                  </ul>
-                  <Button className="mt-4" variant="outline">
-                    Add M.Tech Program
-                  </Button>
-                </div>
-
-                <div className="border rounded-lg p-4">
-                  <h3 className="text-lg font-medium mb-4">Ph.D Programs</h3>
-                  <ul className="space-y-4">
-                    <li className="flex items-center justify-between">
-                      <span>Computer Science</span>
-                      <Button variant="outline" size="sm">
-                        Edit
-                      </Button>
-                    </li>
-                    <li className="flex items-center justify-between">
-                      <span>Electronics</span>
-                      <Button variant="outline" size="sm">
-                        Edit
-                      </Button>
-                    </li>
-                  </ul>
-                  <Button className="mt-4" variant="outline">
-                    Add Ph.D Program
-                  </Button>
-                </div>
-              </div>
-            </div>
+            <CourseEditor />
           </TabsContent>
         </Tabs>
       </div>

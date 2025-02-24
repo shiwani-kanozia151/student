@@ -11,19 +11,8 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
-
-interface Student {
-  id: number;
-  name: string;
-  email: string;
-  department: string;
-  submissionDate: string;
-  status: "Pending" | "Approved" | "Rejected";
-  documents?: {
-    type: string;
-    url: string;
-  }[];
-}
+import { Student } from "@/lib/mockData";
+import { useStudentStore } from "@/lib/studentStore";
 
 const VerificationAdmin = () => {
   const adminEmail = localStorage.getItem("adminEmail");
@@ -36,64 +25,17 @@ const VerificationAdmin = () => {
   }, [adminEmail]);
 
   const [searchTerm, setSearchTerm] = React.useState("");
-  const [pendingVerifications, setPendingVerifications] = React.useState<
-    Student[]
-  >([
-    {
-      id: 1,
-      name: "John Doe",
-      email: "john.doe@example.com",
-      department: "Computer Science",
-      submissionDate: "2024-03-20",
-      status: "Pending",
-      documents: [
-        { type: "ID Proof", url: "#" },
-        { type: "Academic Records", url: "#" },
-      ],
-    },
-    {
-      id: 2,
-      name: "Jane Smith",
-      email: "jane.smith@example.com",
-      department: "Electrical Engineering",
-      submissionDate: "2024-03-21",
-      status: "Pending",
-      documents: [
-        { type: "ID Proof", url: "#" },
-        { type: "Academic Records", url: "#" },
-      ],
-    },
-    {
-      id: 3,
-      name: "Bob Johnson",
-      email: "bob.johnson@example.com",
-      department: "Mechanical Engineering",
-      submissionDate: "2024-03-22",
-      status: "Pending",
-      documents: [
-        { type: "ID Proof", url: "#" },
-        { type: "Academic Records", url: "#" },
-      ],
-    },
-  ]);
+  const { students, updateStudentStatus } = useStudentStore();
 
-  const handleApprove = (id: number) => {
-    setPendingVerifications((prev) =>
-      prev.map((student) =>
-        student.id === id ? { ...student, status: "Approved" } : student,
-      ),
-    );
+  const handleApprove = async (id: string) => {
+    updateStudentStatus(id, "approved");
   };
 
-  const handleReject = (id: number) => {
-    setPendingVerifications((prev) =>
-      prev.map((student) =>
-        student.id === id ? { ...student, status: "Rejected" } : student,
-      ),
-    );
+  const handleReject = async (id: string) => {
+    updateStudentStatus(id, "rejected");
   };
 
-  const filteredVerifications = pendingVerifications.filter((student) =>
+  const filteredStudents = students.filter((student) =>
     Object.values(student).some((value) =>
       value?.toString().toLowerCase().includes(searchTerm.toLowerCase()),
     ),
@@ -127,7 +69,7 @@ const VerificationAdmin = () => {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">
-                {filteredVerifications.length} students
+                {filteredStudents.length} students
               </span>
             </div>
           </div>
@@ -145,12 +87,14 @@ const VerificationAdmin = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredVerifications.map((student) => (
+              {filteredStudents.map((student) => (
                 <TableRow key={student.id}>
                   <TableCell>{student.name}</TableCell>
                   <TableCell>{student.email}</TableCell>
                   <TableCell>{student.department}</TableCell>
-                  <TableCell>{student.submissionDate}</TableCell>
+                  <TableCell>
+                    {new Date(student.created_at).toLocaleDateString()}
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
                       {student.documents?.map((doc, index) => (
@@ -168,9 +112,9 @@ const VerificationAdmin = () => {
                   <TableCell>
                     <span
                       className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        student.status === "Approved"
+                        student.status === "approved"
                           ? "bg-green-100 text-green-800"
-                          : student.status === "Rejected"
+                          : student.status === "rejected"
                             ? "bg-red-100 text-red-800"
                             : "bg-yellow-100 text-yellow-800"
                       }`}
@@ -183,27 +127,27 @@ const VerificationAdmin = () => {
                       <Button
                         size="sm"
                         className={`${
-                          student.status === "Approved"
+                          student.status === "approved"
                             ? "bg-gray-300 cursor-not-allowed"
                             : "bg-green-600 hover:bg-green-700"
                         }`}
                         onClick={() => handleApprove(student.id)}
-                        disabled={student.status === "Approved"}
+                        disabled={student.status === "approved"}
                       >
-                        {student.status === "Approved" ? "Approved" : "Approve"}
+                        {student.status === "approved" ? "Approved" : "Approve"}
                       </Button>
                       <Button
                         size="sm"
                         variant="destructive"
                         onClick={() => handleReject(student.id)}
-                        disabled={student.status === "Rejected"}
+                        disabled={student.status === "rejected"}
                         className={
-                          student.status === "Rejected"
+                          student.status === "rejected"
                             ? "bg-gray-300 cursor-not-allowed"
                             : ""
                         }
                       >
-                        {student.status === "Rejected" ? "Rejected" : "Reject"}
+                        {student.status === "rejected" ? "Rejected" : "Reject"}
                       </Button>
                     </div>
                   </TableCell>
