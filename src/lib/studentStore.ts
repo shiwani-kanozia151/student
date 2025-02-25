@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Student } from "./mockData";
+import { Student, mockStudents } from "./mockData";
 
 type StudentStore = {
   students: Student[];
@@ -11,7 +11,7 @@ type StudentStore = {
 };
 
 export const useStudentStore = create<StudentStore>((set) => ({
-  students: [],
+  students: mockStudents,
   addStudent: (student) =>
     set((state) => ({
       students: [...state.students, student],

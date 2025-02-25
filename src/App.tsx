@@ -5,59 +5,79 @@ import AdminLogin from "./components/auth/AdminLogin";
 import AdminRoleSelector from "./components/admin/AdminRoleSelector";
 import ContentAdmin from "./components/admin/ContentAdmin";
 import VerificationAdmin from "./components/admin/VerificationAdmin";
+import ProtectedRoute from "./components/ProtectedRoute";
 import routes from "tempo-routes";
 
 function App() {
   return (
     <Suspense fallback={<p>Loading...</p>}>
-      <>
-        {import.meta.env.VITE_TEMPO === "true" && useRoutes(routes)}
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route
-            path="/super-admin"
-            element={<Navigate to="/super-admin/login" />}
-          />
-          <Route
-            path="/super-admin/login"
-            element={<AdminLogin adminType="super" />}
-          />
-          <Route
-            path="/content-admin"
-            element={<Navigate to="/content-admin/login" />}
-          />
-          <Route
-            path="/content-admin/login"
-            element={<AdminLogin adminType="content" />}
-          />
-          <Route
-            path="/verification-admin"
-            element={<Navigate to="/verification-admin/login" />}
-          />
-          <Route
-            path="/verification-admin/login"
-            element={<AdminLogin adminType="verification" />}
-          />
-          <Route path="/admin/content" element={<ContentAdmin />} />
-          <Route path="/admin/verification" element={<VerificationAdmin />} />
-          <Route
-            path="/admin/select-role"
-            element={
+      {import.meta.env.VITE_TEMPO === "true" && useRoutes(routes)}
+      <Routes>
+        {/* Main Route */}
+        <Route path="/" element={<Home />} />
+
+        {/* Super Admin Routes */}
+        <Route path="/admin" element={<Navigate to="/admin/login" />} />
+        <Route path="/admin/login" element={<AdminLogin adminType="super" />} />
+        <Route
+          path="/admin/select-role"
+          element={
+            <ProtectedRoute requiredRole="super">
               <AdminRoleSelector
                 onRoleSelect={(role) => {
                   if (role === "content") {
-                    window.location.href = "/admin/content";
+                    window.location.href = "/content-admin/dashboard";
                   } else if (role === "verification") {
-                    window.location.href = "/admin/verification";
+                    window.location.href = "/verification-admin/dashboard";
                   }
                 }}
               />
-            }
-          />
-          <Route path="/admin" element={<Navigate to="/admin/select-role" />} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Content Admin Routes */}
+        <Route
+          path="/content-admin"
+          element={<Navigate to="/content-admin/login" />}
+        />
+        <Route
+          path="/content-admin/login"
+          element={<AdminLogin adminType="content" />}
+        />
+        <Route
+          path="/content-admin/dashboard"
+          element={
+            <ProtectedRoute requiredRole="content">
+              <ContentAdmin />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Verification Admin Routes */}
+        <Route
+          path="/verification-admin"
+          element={<Navigate to="/verification-admin/login" />}
+        />
+        <Route
+          path="/verification-admin/login"
+          element={<AdminLogin adminType="verification" />}
+        />
+        <Route
+          path="/verification-admin/dashboard"
+          element={
+            <ProtectedRoute requiredRole="verification">
+              <VerificationAdmin />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Tempo Routes */}
+        {import.meta.env.VITE_TEMPO && <Route path="/tempobook/*" />}
+
+        {/* Fallback Route */}
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
     </Suspense>
   );
 }

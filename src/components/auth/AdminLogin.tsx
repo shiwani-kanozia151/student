@@ -36,14 +36,14 @@ const AdminLogin = ({ adminType }: AdminLoginProps) => {
       ) {
         localStorage.setItem("adminEmail", email);
         localStorage.setItem("adminRole", "content");
-        navigate("/admin/content");
+        navigate("/content-admin/dashboard");
       } else if (
         adminType === "verification" &&
         (user.role === "verification" || user.role === "super")
       ) {
         localStorage.setItem("adminEmail", email);
         localStorage.setItem("adminRole", "verification");
-        navigate("/admin/verification");
+        navigate("/verification-admin/dashboard");
       } else {
         setError("You don't have permission to access this area");
       }
