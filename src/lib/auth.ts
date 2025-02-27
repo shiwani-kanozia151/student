@@ -1,5 +1,9 @@
 import { supabase } from "./supabase";
 
+// For development, generate a static OTP
+const DEV_MODE = true;
+let currentOTP = "";
+
 export interface AuthResponse {
   success: boolean;
   error?: string;
@@ -8,6 +12,14 @@ export interface AuthResponse {
 
 export const sendOTP = async (email: string): Promise<AuthResponse> => {
   try {
+    if (DEV_MODE) {
+      // Generate a 6-digit OTP
+      currentOTP = Math.floor(100000 + Math.random() * 900000).toString();
+      console.log(`DEV MODE: OTP for ${email} is ${currentOTP}`);
+      return { success: true, data: { otp: currentOTP } };
+    }
+
+    // Production mode - use Supabase
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
@@ -29,6 +41,16 @@ export const verifyOTP = async (
   token: string,
 ): Promise<AuthResponse> => {
   try {
+    if (DEV_MODE) {
+      // In dev mode, just check against the generated OTP
+      if (token === currentOTP) {
+        return { success: true, data: { user: { email } } };
+      } else {
+        throw new Error("Invalid OTP");
+      }
+    }
+
+    // Production mode - use Supabase
     const { data, error } = await supabase.auth.verifyOtp({
       email,
       token,

@@ -1,12 +1,14 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import MainNavbar from "./navigation/MainNavbar";
 import InstitutionalHeader from "./header/InstitutionalHeader";
 import NewsTicker from "./news/NewsTicker";
 import StudentLoginModal from "./auth/StudentLoginModal";
-import NewStudentRegistration from "./auth/NewStudentRegistration";
 import StudentLoginSelector from "./auth/StudentLoginSelector";
+import StudentAuth from "./auth/StudentAuth";
 
 const Home = () => {
+  const navigate = useNavigate();
   const [isLoginOpen, setIsLoginOpen] = React.useState(false);
   const [showAuthFlow, setShowAuthFlow] = React.useState(false);
   const [isNewUser, setIsNewUser] = React.useState(false);
@@ -26,16 +28,17 @@ const Home = () => {
         }}
       />
       {isNewUser ? (
-        <NewStudentRegistration
+        <StudentAuth
           isOpen={showAuthFlow}
           onClose={() => {
             setShowAuthFlow(false);
             setIsLoginOpen(false);
           }}
-          onRegister={(data) => {
+          onAuthenticated={(data) => {
             console.log("Registration completed:", data);
             setShowAuthFlow(false);
             setIsLoginOpen(false);
+            navigate("/student/courses");
           }}
         />
       ) : (
@@ -49,6 +52,7 @@ const Home = () => {
             console.log("Login completed:", data);
             setShowAuthFlow(false);
             setIsLoginOpen(false);
+            navigate("/student/courses");
           }}
         />
       )}

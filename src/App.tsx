@@ -6,6 +6,9 @@ import AdminRoleSelector from "./components/admin/AdminRoleSelector";
 import ContentAdmin from "./components/admin/ContentAdmin";
 import VerificationAdmin from "./components/admin/VerificationAdmin";
 import ProtectedRoute from "./components/ProtectedRoute";
+import StudentDashboard from "./components/student/StudentDashboard";
+import CourseSelection from "./components/student/CourseSelection";
+import ApplicationForm from "./components/student/ApplicationForm";
 import routes from "tempo-routes";
 
 function App() {
@@ -15,6 +18,14 @@ function App() {
       <Routes>
         {/* Main Route */}
         <Route path="/" element={<Home />} />
+
+        {/* Student Routes */}
+        <Route path="/student/dashboard" element={<StudentDashboard />} />
+        <Route path="/student/courses" element={<CourseSelection />} />
+        <Route
+          path="/student/application/:courseId"
+          element={<ApplicationForm />}
+        />
 
         {/* Super Admin Routes */}
         <Route path="/admin" element={<Navigate to="/admin/login" />} />

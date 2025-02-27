@@ -54,6 +54,11 @@ const StudentAuth = ({
     if (response.success) {
       setStep("OTP");
       setError("");
+      // Show the OTP in development mode
+      if (response.data?.otp) {
+        console.log(`Use this OTP: ${response.data.otp}`);
+        alert(`Development mode: Your OTP is ${response.data.otp}`);
+      }
     } else {
       setError(response.error || "Failed to send OTP");
     }
