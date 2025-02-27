@@ -1,6 +1,4 @@
 import React from "react";
-import { Button } from "@/components/ui/button";
-import { isAuthorized } from "@/lib/adminAuth";
 import {
   Table,
   TableBody,
@@ -11,28 +9,60 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
-import { Student } from "@/lib/mockData";
-import { useStudentStore } from "@/lib/studentStore";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase";
+import type { Student } from "@/lib/mockData";
 
 const VerificationAdmin = () => {
-  const adminEmail = localStorage.getItem("adminEmail");
-  const adminRole = localStorage.getItem("adminRole");
-
-  React.useEffect(() => {
-    if (!adminEmail || !isAuthorized(adminEmail, "verification")) {
-      window.location.href = "/admin/login";
-    }
-  }, [adminEmail]);
-
   const [searchTerm, setSearchTerm] = React.useState("");
-  const { students, updateStudentStatus } = useStudentStore();
+  const [students, setStudents] = React.useState<Student[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const handleApprove = async (id: string) => {
-    updateStudentStatus(id, "approved");
+  const fetchStudents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: supabaseError } = await supabase
+        .from("students")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (supabaseError) throw supabaseError;
+
+      setStudents(data || []);
+    } catch (err) {
+      console.error("Error fetching students:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleReject = async (id: string) => {
-    updateStudentStatus(id, "rejected");
+  React.useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  const handleStatusUpdate = async (
+    id: string,
+    status: "approved" | "rejected",
+  ) => {
+    try {
+      setError(null);
+      const { error: updateError } = await supabase
+        .from("students")
+        .update({ status })
+        .eq("id", id);
+
+      if (updateError) throw updateError;
+
+      // Refresh the students list
+      await fetchStudents();
+    } catch (err) {
+      console.error(`Error ${status} student:`, err);
+      setError(err.message);
+    }
   };
 
   const filteredStudents = students.filter((student) =>
@@ -41,6 +71,14 @@ const VerificationAdmin = () => {
     ),
   );
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 p-6 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A2240]"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 p-6">
       <div className="max-w-7xl mx-auto">
@@ -48,13 +86,13 @@ const VerificationAdmin = () => {
           <h1 className="text-2xl font-bold text-[#0A2240]">
             Student Verification Dashboard
           </h1>
-          <Button
-            onClick={() => (window.location.href = "/admin")}
-            variant="outline"
-          >
-            Switch Role
-          </Button>
         </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            {error}
+          </div>
+        )}
 
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center gap-4 mb-6">
@@ -131,7 +169,9 @@ const VerificationAdmin = () => {
                             ? "bg-gray-300 cursor-not-allowed"
                             : "bg-green-600 hover:bg-green-700"
                         }`}
-                        onClick={() => handleApprove(student.id)}
+                        onClick={() =>
+                          handleStatusUpdate(student.id, "approved")
+                        }
                         disabled={student.status === "approved"}
                       >
                         {student.status === "approved" ? "Approved" : "Approve"}
@@ -139,7 +179,9 @@ const VerificationAdmin = () => {
                       <Button
                         size="sm"
                         variant="destructive"
-                        onClick={() => handleReject(student.id)}
+                        onClick={() =>
+                          handleStatusUpdate(student.id, "rejected")
+                        }
                         disabled={student.status === "rejected"}
                         className={
                           student.status === "rejected"

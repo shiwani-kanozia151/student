@@ -4,16 +4,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { sendOTP } from "@/lib/emailService";
-import { useStudentStore } from "@/lib/studentStore";
+import { sendOTP, verifyOTP, signUp } from "@/lib/auth";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-type AuthStep = "EMAIL" | "OTP" | "NEW_PASSWORD" | "LOGIN";
+type AuthStep = "EMAIL" | "OTP" | "DETAILS" | "NEW_PASSWORD";
 
 interface StudentAuthProps {
   isOpen?: boolean;
@@ -29,15 +35,11 @@ const StudentAuth = ({
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [otp, setOtp] = React.useState("");
+  const [name, setName] = React.useState("");
+  const [department, setDepartment] = React.useState("");
   const [error, setError] = React.useState("");
   const [step, setStep] = React.useState<AuthStep>("EMAIL");
-  const [generatedOTP, setGeneratedOTP] = React.useState("");
-
-  const { addStudent } = useStudentStore();
-
-  const generateOTP = () => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-  };
+  const [loading, setLoading] = React.useState(false);
 
   const handleEmailSubmit = async () => {
     if (!email) {
@@ -45,42 +47,61 @@ const StudentAuth = ({
       return;
     }
 
-    const newOTP = generateOTP();
-    setGeneratedOTP(newOTP);
-    await sendOTP(email, newOTP);
-    setStep("OTP");
-    setError("");
-  };
+    setLoading(true);
+    const response = await sendOTP(email);
+    setLoading(false);
 
-  const handleOTPVerification = () => {
-    if (otp === generatedOTP) {
-      setStep("NEW_PASSWORD");
+    if (response.success) {
+      setStep("OTP");
       setError("");
     } else {
-      setError("Invalid OTP");
+      setError(response.error || "Failed to send OTP");
     }
   };
 
-  const handlePasswordSubmit = () => {
+  const handleOTPVerification = async () => {
+    if (!otp) {
+      setError("Please enter the OTP");
+      return;
+    }
+
+    setLoading(true);
+    const response = await verifyOTP(email, otp);
+    setLoading(false);
+
+    if (response.success) {
+      setStep("DETAILS");
+      setError("");
+    } else {
+      setError(response.error || "Invalid OTP");
+    }
+  };
+
+  const handleDetailsSubmit = () => {
+    if (!name || !department) {
+      setError("Please fill in all fields");
+      return;
+    }
+    setStep("NEW_PASSWORD");
+    setError("");
+  };
+
+  const handleRegistration = async () => {
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
       return;
     }
 
-    if (step === "NEW_PASSWORD") {
-      addStudent({
-        id: Date.now().toString(),
-        name: email.split("@")[0],
-        email,
-        department: "Pending Department Selection",
-        status: "pending",
-        created_at: new Date().toISOString(),
-        documents: [],
-      });
-    }
+    setLoading(true);
+    const response = await signUp(email, password, { name, department });
+    setLoading(false);
 
-    onAuthenticated({ email, isNewUser: step === "NEW_PASSWORD" });
-    onClose();
+    if (response.success) {
+      onAuthenticated({ email, isNewUser: true });
+      onClose();
+    } else {
+      setError(response.error || "Registration failed");
+    }
   };
 
   const renderStep = () => {
@@ -102,8 +123,9 @@ const StudentAuth = ({
             <Button
               onClick={handleEmailSubmit}
               className="w-full bg-[#0A2240] hover:bg-[#0A2240]/90"
+              disabled={loading}
             >
-              Continue
+              {loading ? "Sending..." : "Continue"}
             </Button>
           </div>
         );
@@ -126,38 +148,73 @@ const StudentAuth = ({
             <Button
               onClick={handleOTPVerification}
               className="w-full bg-[#0A2240] hover:bg-[#0A2240]/90"
+              disabled={loading}
             >
-              Verify OTP
+              {loading ? "Verifying..." : "Verify OTP"}
+            </Button>
+          </div>
+        );
+
+      case "DETAILS":
+        return (
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="name">Full Name</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Enter your full name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="department">Department</Label>
+              <Select value={department} onValueChange={setDepartment}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select your department" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Computer Science">
+                    Computer Science
+                  </SelectItem>
+                  <SelectItem value="Electronics">Electronics</SelectItem>
+                  <SelectItem value="Mechanical">Mechanical</SelectItem>
+                  <SelectItem value="Civil">Civil</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button
+              onClick={handleDetailsSubmit}
+              className="w-full bg-[#0A2240] hover:bg-[#0A2240]/90"
+            >
+              Continue
             </Button>
           </div>
         );
 
       case "NEW_PASSWORD":
-      case "LOGIN":
         return (
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="password">
-                {step === "NEW_PASSWORD" ? "Create Password" : "Password"}
-              </Label>
+              <Label htmlFor="password">Create Password</Label>
               <Input
                 id="password"
                 type="password"
-                placeholder={
-                  step === "NEW_PASSWORD"
-                    ? "Create a password"
-                    : "Enter your password"
-                }
+                placeholder="Create a password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
 
             <Button
-              onClick={handlePasswordSubmit}
+              onClick={handleRegistration}
               className="w-full bg-[#0A2240] hover:bg-[#0A2240]/90"
+              disabled={loading}
             >
-              {step === "NEW_PASSWORD" ? "Create Account" : "Login"}
+              {loading ? "Creating Account..." : "Create Account"}
             </Button>
           </div>
         );
@@ -169,10 +226,10 @@ const StudentAuth = ({
       <DialogContent className="bg-white sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-[#0A2240]">
-            {step === "EMAIL" && "Student Authentication"}
+            {step === "EMAIL" && "Student Registration"}
             {step === "OTP" && "Verify Email"}
+            {step === "DETAILS" && "Personal Details"}
             {step === "NEW_PASSWORD" && "Create Password"}
-            {step === "LOGIN" && "Student Login"}
           </DialogTitle>
         </DialogHeader>
 
