@@ -2,6 +2,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/lib/supabase";
 
 interface AcademicSection {
   id: string;
@@ -46,9 +47,24 @@ const AcademicEditor = () => {
     setSections(sections.filter((section) => section.id !== id));
   };
 
-  const handleSave = () => {
-    // Save changes to backend
-    console.log("Saving academic sections:", sections);
+  const handleSave = async () => {
+    try {
+      // Save changes to backend
+      const { error } = await supabase.from("content").upsert([
+        {
+          type: "academic",
+          title: "Academic Content",
+          content: sections,
+        },
+      ]);
+
+      if (error) throw error;
+
+      // Force a refresh to show updated content
+      window.location.reload();
+    } catch (err) {
+      console.error("Error saving academic content:", err);
+    }
   };
 
   return (

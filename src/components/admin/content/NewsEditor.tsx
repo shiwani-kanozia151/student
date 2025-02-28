@@ -2,6 +2,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/lib/supabase";
 
 interface NewsItem {
   id: string;
@@ -44,9 +45,24 @@ const NewsEditor = () => {
     setNewsItems(newsItems.filter((item) => item.id !== id));
   };
 
-  const handleSave = () => {
-    // Save changes to backend
-    console.log("Saving news:", newsItems);
+  const handleSave = async () => {
+    try {
+      // Save changes to backend
+      const { error } = await supabase.from("content").upsert([
+        {
+          type: "news",
+          title: "News Updates",
+          content: newsItems,
+        },
+      ]);
+
+      if (error) throw error;
+
+      // Force a refresh to show updated content
+      window.location.reload();
+    } catch (err) {
+      console.error("Error saving news:", err);
+    }
   };
 
   return (

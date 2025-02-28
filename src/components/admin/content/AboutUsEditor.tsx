@@ -112,6 +112,9 @@ const AboutUsEditor = ({ initialContent }: AboutUsEditorProps) => {
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
+
+      // Force a refresh of the page to show updated content
+      window.location.reload();
     } catch (err) {
       console.error("Error saving content:", err);
       setError(err.message);

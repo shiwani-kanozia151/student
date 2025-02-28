@@ -2,6 +2,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/lib/supabase";
 import {
   Select,
   SelectContent,
@@ -50,9 +51,27 @@ const CourseEditor = () => {
     setCourses(courses.filter((course) => course.id !== id));
   };
 
-  const handleSave = () => {
-    // Save changes to backend
-    console.log("Saving courses:", courses);
+  const handleSave = async () => {
+    try {
+      // Save changes to backend
+      for (const course of courses) {
+        const { error } = await supabase.from("courses").upsert([
+          {
+            id: course.id,
+            name: course.name,
+            type: course.type,
+            description: course.description,
+          },
+        ]);
+
+        if (error) throw error;
+      }
+
+      // Force a refresh to show updated content
+      window.location.reload();
+    } catch (err) {
+      console.error("Error saving courses:", err);
+    }
   };
 
   const coursesByType = courses.reduce(

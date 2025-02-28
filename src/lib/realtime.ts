@@ -12,6 +12,7 @@ export const subscribeToContentUpdates = (callback: (payload: any) => void) => {
         table: "content",
       },
       (payload) => {
+        console.log("Content update received:", payload);
         callback(payload);
       },
     )
