@@ -6,12 +6,70 @@ import NewsTicker from "./news/NewsTicker";
 import StudentLoginModal from "./auth/StudentLoginModal";
 import StudentLoginSelector from "./auth/StudentLoginSelector";
 import StudentAuth from "./auth/StudentAuth";
+import { supabase } from "@/lib/supabase";
+import { subscribeToContentUpdates } from "@/lib/realtime";
+
+interface ContentData {
+  vision?: string;
+  mission?: string[];
+}
 
 const Home = () => {
   const navigate = useNavigate();
   const [isLoginOpen, setIsLoginOpen] = React.useState(false);
   const [showAuthFlow, setShowAuthFlow] = React.useState(false);
   const [isNewUser, setIsNewUser] = React.useState(false);
+  const [contentData, setContentData] = React.useState<ContentData>({
+    vision:
+      "To be a university globally trusted for technical excellence where learning and research integrate to sustain society and industry.",
+    mission: [
+      "To offer undergraduate, postgraduate, doctoral and modular programmes in multi-disciplinary / inter-disciplinary and emerging areas.",
+      "To create a converging learning environment to serve a dynamically evolving society.",
+      "To promote innovation for sustainable solutions by forging global collaborations with academia and industry in cutting-edge research.",
+      "To be an intellectual ecosystem where human capabilities can develop holistically.",
+    ],
+  });
+
+  // Fetch content data on component mount
+  React.useEffect(() => {
+    const fetchContent = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("content")
+          .select("*")
+          .eq("type", "about");
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          const aboutContent = data[0].content;
+          setContentData({
+            vision: aboutContent.vision || contentData.vision,
+            mission: aboutContent.mission || contentData.mission,
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching content:", err);
+      }
+    };
+
+    fetchContent();
+
+    // Set up real-time subscription for content updates
+    const unsubscribe = subscribeToContentUpdates((payload) => {
+      if (payload.new && payload.new.type === "about") {
+        const newContent = payload.new.content;
+        setContentData({
+          vision: newContent.vision || contentData.vision,
+          mission: newContent.mission || contentData.mission,
+        });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-white">
@@ -71,33 +129,15 @@ const Home = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <section>
             <h2 className="text-2xl font-bold text-[#002147] mb-4">Vision</h2>
-            <p className="text-gray-700">
-              To be a university globally trusted for technical excellence where
-              learning and research integrate to sustain society and industry.
-            </p>
+            <p className="text-gray-700">{contentData.vision}</p>
           </section>
 
           <section>
             <h2 className="text-2xl font-bold text-[#002147] mb-4">Mission</h2>
             <ul className="space-y-4 text-gray-700">
-              <li>
-                To offer undergraduate, postgraduate, doctoral and modular
-                programmes in multi-disciplinary / inter-disciplinary and
-                emerging areas.
-              </li>
-              <li>
-                To create a converging learning environment to serve a
-                dynamically evolving society.
-              </li>
-              <li>
-                To promote innovation for sustainable solutions by forging
-                global collaborations with academia and industry in cutting-edge
-                research.
-              </li>
-              <li>
-                To be an intellectual ecosystem where human capabilities can
-                develop holistically.
-              </li>
+              {contentData.mission?.map((item, index) => (
+                <li key={index}>{item}</li>
+              ))}
             </ul>
           </section>
         </div>

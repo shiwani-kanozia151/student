@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/lib/supabase";
 import { signOut } from "@/lib/auth";
+import { subscribeToStudentStatusUpdates } from "@/lib/realtime";
 
 interface StudentDashboardProps {
   studentId?: string;
@@ -15,28 +16,41 @@ const StudentDashboard = ({ studentId }: StudentDashboardProps) => {
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    let currentStudentId = studentId;
+    let unsubscribe: () => void;
+
     const fetchStudentData = async () => {
       try {
         setLoading(true);
         setError(null);
 
         // Get current user if studentId not provided
-        if (!studentId) {
+        if (!currentStudentId) {
           const {
             data: { user },
           } = await supabase.auth.getUser();
           if (!user) throw new Error("Not authenticated");
-          studentId = user.id;
+          currentStudentId = user.id;
         }
 
         const { data, error: fetchError } = await supabase
           .from("students")
           .select("*")
-          .eq("id", studentId)
+          .eq("id", currentStudentId)
           .single();
 
         if (fetchError) throw fetchError;
         setStudent(data);
+
+        // Set up real-time subscription for student status updates
+        unsubscribe = subscribeToStudentStatusUpdates(
+          currentStudentId,
+          (payload) => {
+            if (payload.new) {
+              setStudent(payload.new);
+            }
+          },
+        );
       } catch (err) {
         console.error("Error fetching student data:", err);
         setError(err.message);
@@ -46,6 +60,10 @@ const StudentDashboard = ({ studentId }: StudentDashboardProps) => {
     };
 
     fetchStudentData();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, [studentId]);
 
   const handleLogout = async () => {
@@ -194,15 +212,39 @@ const StudentDashboard = ({ studentId }: StudentDashboardProps) => {
 
         {student.status === "pending" && (
           <div className="mt-6 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
-            Your application is currently under review. You will be notified
-            once it's approved.
+            <p className="font-medium">
+              Your application is currently under review.
+            </p>
+            {student.admin_remarks && (
+              <div className="mt-2">
+                <p className="font-medium">Admin Remarks:</p>
+                <p>{student.admin_remarks}</p>
+              </div>
+            )}
           </div>
         )}
 
         {student.status === "rejected" && (
           <div className="mt-6 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
-            Your application has been rejected. Please contact the
-            administration for more information.
+            <p className="font-medium">Your application has been rejected.</p>
+            {student.admin_remarks && (
+              <div className="mt-2">
+                <p className="font-medium">Reason for rejection:</p>
+                <p>{student.admin_remarks}</p>
+              </div>
+            )}
+            <p className="mt-2">
+              Please contact the administration for more information.
+            </p>
+          </div>
+        )}
+
+        {student.status === "approved" && (
+          <div className="mt-6 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded">
+            <p className="font-medium">Your application has been approved!</p>
+            <p className="mt-2">
+              You can now proceed with the next steps in your admission process.
+            </p>
           </div>
         )}
       </div>

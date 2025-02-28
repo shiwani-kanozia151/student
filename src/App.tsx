@@ -18,6 +18,7 @@ function App() {
       <Routes>
         {/* Main Route */}
         <Route path="/" element={<Home />} />
+        <Route path="/about" element={<React.lazy(() => import("./components/about/AboutUs")) />} />
 
         {/* Student Routes */}
         <Route path="/student/dashboard" element={<StudentDashboard />} />

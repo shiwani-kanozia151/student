@@ -210,7 +210,7 @@ const ApplicationForm = () => {
     setError(null);
 
     try {
-      // Validate form
+      // Only validate required fields
       const requiredPersonalFields = [
         "firstName",
         "lastName",
@@ -232,19 +232,22 @@ const ApplicationForm = () => {
         ? ["graduationSchool", "graduationPercentage", "graduationDegree"]
         : [];
 
-      const missingFields = [
+      const requiredFields = [
         ...requiredPersonalFields,
         ...requiredAcademicFields,
         ...requiredPGFields,
-      ].filter((field) => !formData[field as keyof FormData]);
+      ];
+      const missingFields = requiredFields.filter(
+        (field) => !formData[field as keyof FormData],
+      );
 
       if (missingFields.length > 0) {
         throw new Error(
-          `Please fill in all required fields: ${missingFields.join(", ")}`,
+          `Please fill in all required fields marked with asterisks (*): ${missingFields.join(", ")}`,
         );
       }
 
-      // Check required documents
+      // Check required documents only
       const requiredDocuments = isPG
         ? [
             "tenthMarksheet",
@@ -261,7 +264,7 @@ const ApplicationForm = () => {
 
       if (missingDocuments.length > 0) {
         throw new Error(
-          `Please upload all required documents: ${missingDocuments.map((d) => documents[d].type).join(", ")}`,
+          `Please upload all required documents marked with asterisks (*): ${missingDocuments.map((d) => documents[d].type).join(", ")}`,
         );
       }
 
@@ -656,6 +659,7 @@ const ApplicationForm = () => {
                             value={formData.graduationSchool}
                             onChange={handleInputChange}
                             className="mt-1"
+                            required
                           />
                         </div>
                         <div>
@@ -668,6 +672,7 @@ const ApplicationForm = () => {
                             value={formData.graduationPercentage}
                             onChange={handleInputChange}
                             className="mt-1"
+                            required
                           />
                         </div>
                         <div>
@@ -678,6 +683,7 @@ const ApplicationForm = () => {
                             value={formData.graduationDegree}
                             onChange={handleInputChange}
                             className="mt-1"
+                            required
                           />
                         </div>
                       </div>
