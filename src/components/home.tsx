@@ -126,7 +126,7 @@ const Home = () => {
       <NewsTicker />
 
       <main className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="flex flex-col gap-8">
           <section>
             <h2 className="text-2xl font-bold text-[#002147] mb-4">Vision</h2>
             <p className="text-gray-700">{contentData.vision}</p>

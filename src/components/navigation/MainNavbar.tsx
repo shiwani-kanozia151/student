@@ -14,7 +14,6 @@ const MainNavbar = ({ onLoginClick = () => {} }: MainNavbarProps) => {
     { title: "Academic", href: "/academic" },
     { title: "Admission", href: "/admission" },
     { title: "Courses", href: "/courses" },
-    { title: "Research & Consultancy", href: "/research" },
     { title: "Student Login", href: "#", onClick: onLoginClick },
   ];
 
@@ -27,6 +26,14 @@ const MainNavbar = ({ onLoginClick = () => {} }: MainNavbarProps) => {
       item.onClick();
     } else if (item.href === "/about") {
       navigate("/about");
+    } else if (item.href === "/administration") {
+      navigate("/administration");
+    } else if (item.href === "/academic") {
+      navigate("/academic");
+    } else if (item.href === "/admission") {
+      navigate("/admission");
+    } else if (item.href === "/courses") {
+      navigate("/courses");
     } else {
       // For other links that aren't implemented yet
       console.log(`Navigating to ${item.href} - not implemented yet`);

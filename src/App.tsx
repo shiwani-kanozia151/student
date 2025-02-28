@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, lazy } from "react";
 import { useRoutes, Routes, Route, Navigate } from "react-router-dom";
 import Home from "./components/home";
 import AdminLogin from "./components/auth/AdminLogin";
@@ -11,6 +11,14 @@ import CourseSelection from "./components/student/CourseSelection";
 import ApplicationForm from "./components/student/ApplicationForm";
 import routes from "tempo-routes";
 
+const AboutUs = lazy(() => import("./components/about/AboutUs"));
+const Administration = lazy(
+  () => import("./components/administration/Administration"),
+);
+const Academic = lazy(() => import("./components/academic/Academic"));
+const Admission = lazy(() => import("./components/admission/Admission"));
+const Courses = lazy(() => import("./components/courses/Courses"));
+
 function App() {
   return (
     <Suspense fallback={<p>Loading...</p>}>
@@ -18,7 +26,11 @@ function App() {
       <Routes>
         {/* Main Route */}
         <Route path="/" element={<Home />} />
-        <Route path="/about" element={<React.lazy(() => import("./components/about/AboutUs")) />} />
+        <Route path="/about" element={<AboutUs />} />
+        <Route path="/administration" element={<Administration />} />
+        <Route path="/academic" element={<Academic />} />
+        <Route path="/admission" element={<Admission />} />
+        <Route path="/courses" element={<Courses />} />
 
         {/* Student Routes */}
         <Route path="/student/dashboard" element={<StudentDashboard />} />
