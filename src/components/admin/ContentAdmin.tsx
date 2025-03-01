@@ -4,6 +4,7 @@ import AboutUsEditor from "./content/AboutUsEditor";
 import NewsEditor from "./content/NewsEditor";
 import AcademicEditor from "./content/AcademicEditor";
 import CourseEditor from "./content/CourseEditor";
+import NavbarEditor from "./content/NavbarEditor";
 import { supabase } from "@/lib/supabase";
 
 const ContentAdmin = () => {
@@ -73,11 +74,12 @@ const ContentAdmin = () => {
         )}
 
         <Tabs defaultValue="about" className="w-full">
-          <TabsList className="grid grid-cols-2 lg:grid-cols-4 w-full mb-6">
+          <TabsList className="grid grid-cols-2 lg:grid-cols-5 w-full mb-6">
             <TabsTrigger value="about">About Us</TabsTrigger>
             <TabsTrigger value="news">News</TabsTrigger>
             <TabsTrigger value="academic">Academic</TabsTrigger>
             <TabsTrigger value="courses">Courses</TabsTrigger>
+            <TabsTrigger value="navbar">Navigation</TabsTrigger>
           </TabsList>
 
           <TabsContent value="about" className="mt-0">
@@ -100,6 +102,14 @@ const ContentAdmin = () => {
 
           <TabsContent value="courses" className="mt-0">
             <CourseEditor initialCourses={data.courses} />
+          </TabsContent>
+
+          <TabsContent value="navbar" className="mt-0">
+            <NavbarEditor
+              initialNavItems={
+                data.content.find((c) => c.type === "navbar")?.content
+              }
+            />
           </TabsContent>
         </Tabs>
       </div>

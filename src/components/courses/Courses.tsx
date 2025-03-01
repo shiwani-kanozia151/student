@@ -1,7 +1,93 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
+import { subscribeToContentUpdates } from "@/lib/realtime";
+
+interface Course {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  duration?: string;
+}
 
 const Courses = () => {
+  const [courses, setCourses] = React.useState<Course[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const fetchCourses = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      console.log("Fetching courses...");
+      const { data, error } = await supabase
+        .from("courses")
+        .select("*")
+        .order("type");
+
+      if (error) throw error;
+
+      console.log("Courses fetched:", data);
+      if (data) {
+        setCourses(data);
+      }
+    } catch (err) {
+      console.error("Error fetching courses:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchCourses();
+
+    // Set up real-time subscription for course updates
+    const unsubscribe = subscribeToContentUpdates((payload) => {
+      console.log("Subscription payload received:", payload);
+      if (payload.table === "courses") {
+        console.log("Course change detected, refreshing...");
+        fetchCourses(); // Refetch all courses when there's an update
+      }
+    });
+
+    // Set up a manual refresh interval as a fallback
+    const intervalId = setInterval(() => {
+      console.log("Interval refresh of courses");
+      fetchCourses();
+    }, 10000); // Refresh every 10 seconds
+
+    return () => {
+      unsubscribe();
+      clearInterval(intervalId);
+    };
+  }, [fetchCourses]);
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A2240]"></div>
+      </div>
+    );
+  }
+
+  // Group courses by type
+  const coursesByType = courses.reduce(
+    (acc, course) => {
+      const type = course.type;
+      if (!acc[type]) {
+        acc[type] = [];
+      }
+      acc[type].push(course);
+      return acc;
+    },
+    {} as Record<string, Course[]>,
+  );
+
+  // Define program categories with all possible course types
+  const programCategories = {
+    undergraduate: ["btech", "bsc-bed"],
+    postgraduate: ["mtech", "msc", "mca", "mba", "ma"],
+    research: ["ms", "phd"],
+  };
+
   return (
     <div className="min-h-screen bg-white">
       <main className="container mx-auto px-4 py-8">
@@ -21,23 +107,33 @@ const Courses = () => {
                 Undergraduate Programs
               </h2>
               <ul className="space-y-3">
-                <li className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors">
-                  <Link to="/courses/btech" className="block font-medium">
-                    B. Tech. / B. Arch.
-                  </Link>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Four-year undergraduate engineering and architecture
-                    programs
-                  </p>
-                </li>
-                <li className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors">
-                  <Link to="/courses/bsc-bed" className="block font-medium">
-                    B.Sc. B.Ed.
-                  </Link>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Integrated science and education program
-                  </p>
-                </li>
+                {programCategories.undergraduate.map((type) => {
+                  if (!coursesByType[type] || coursesByType[type].length === 0)
+                    return null;
+
+                  const displayName =
+                    type === "btech" ? "B. Tech. / B. Arch." : "B.Sc. B.Ed.";
+                  const firstCourse = coursesByType[type][0];
+
+                  return (
+                    <li
+                      key={type}
+                      className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors"
+                    >
+                      <Link
+                        to={`/courses/${type}`}
+                        className="block font-medium"
+                      >
+                        {displayName}
+                      </Link>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {type === "btech"
+                          ? "Undergraduate engineering and architecture programs"
+                          : "Integrated science and education program"}
+                      </p>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
 
@@ -46,46 +142,55 @@ const Courses = () => {
                 Postgraduate Programs
               </h2>
               <ul className="space-y-3">
-                <li className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors">
-                  <Link to="/courses/mtech" className="block font-medium">
-                    M. Tech. / M. Arch.
-                  </Link>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Two-year postgraduate engineering and architecture programs
-                  </p>
-                </li>
-                <li className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors">
-                  <Link to="/courses/msc" className="block font-medium">
-                    M. Sc.
-                  </Link>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Two-year postgraduate science programs
-                  </p>
-                </li>
-                <li className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors">
-                  <Link to="/courses/mca" className="block font-medium">
-                    MCA
-                  </Link>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Master of Computer Applications
-                  </p>
-                </li>
-                <li className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors">
-                  <Link to="/courses/mba" className="block font-medium">
-                    MBA
-                  </Link>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Master of Business Administration
-                  </p>
-                </li>
-                <li className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors">
-                  <Link to="/courses/ma" className="block font-medium">
-                    MA
-                  </Link>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Master of Arts programs
-                  </p>
-                </li>
+                {programCategories.postgraduate.map((type) => {
+                  if (!coursesByType[type] || coursesByType[type].length === 0)
+                    return null;
+
+                  let displayName = "";
+                  let description = "";
+                  const firstCourse = coursesByType[type][0];
+
+                  switch (type) {
+                    case "mtech":
+                      displayName = "M. Tech. / M. Arch.";
+                      description =
+                        "Postgraduate engineering and architecture programs";
+                      break;
+                    case "msc":
+                      displayName = "M. Sc.";
+                      description = "Postgraduate science programs";
+                      break;
+                    case "mca":
+                      displayName = "MCA";
+                      description = "Master of Computer Applications";
+                      break;
+                    case "mba":
+                      displayName = "MBA";
+                      description = "Master of Business Administration";
+                      break;
+                    case "ma":
+                      displayName = "MA";
+                      description = "Master of Arts programs";
+                      break;
+                  }
+
+                  return (
+                    <li
+                      key={type}
+                      className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors"
+                    >
+                      <Link
+                        to={`/courses/${type}`}
+                        className="block font-medium"
+                      >
+                        {displayName}
+                      </Link>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {description}
+                      </p>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
 
@@ -94,22 +199,35 @@ const Courses = () => {
                 Research Programs
               </h2>
               <ul className="space-y-3">
-                <li className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors">
-                  <Link to="/courses/ms" className="block font-medium">
-                    M.S. (by Research)
-                  </Link>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Master of Science by research
-                  </p>
-                </li>
-                <li className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors">
-                  <Link to="/courses/phd" className="block font-medium">
-                    Ph. D.
-                  </Link>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Doctoral research programs across disciplines
-                  </p>
-                </li>
+                {programCategories.research.map((type) => {
+                  if (!coursesByType[type] || coursesByType[type].length === 0)
+                    return null;
+
+                  const displayName =
+                    type === "ms" ? "M.S. (by Research)" : "Ph. D.";
+                  const description =
+                    type === "ms"
+                      ? "Master of Science by research"
+                      : "Doctoral research programs across disciplines";
+                  const firstCourse = coursesByType[type][0];
+
+                  return (
+                    <li
+                      key={type}
+                      className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors"
+                    >
+                      <Link
+                        to={`/courses/${type}`}
+                        className="block font-medium"
+                      >
+                        {displayName}
+                      </Link>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {description}
+                      </p>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
 

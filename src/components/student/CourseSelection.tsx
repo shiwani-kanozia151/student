@@ -9,71 +9,98 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
+import { subscribeToContentUpdates } from "@/lib/realtime";
 
 interface Course {
   id: string;
   name: string;
-  type: "ug" | "pg" | "phd";
+  type: string;
   description: string;
-  duration: string;
+  duration?: string;
 }
 
-const courses: Course[] = [
-  {
-    id: "btech-cse",
-    name: "B.Tech in Computer Science and Engineering",
-    type: "ug",
-    description:
-      "Four-year undergraduate program focusing on computer science fundamentals, programming, and software engineering.",
-    duration: "4 years",
-  },
-  {
-    id: "btech-ece",
-    name: "B.Tech in Electronics and Communication Engineering",
-    type: "ug",
-    description:
-      "Four-year undergraduate program covering electronics, communication systems, and signal processing.",
-    duration: "4 years",
-  },
-  {
-    id: "btech-mech",
-    name: "B.Tech in Mechanical Engineering",
-    type: "ug",
-    description:
-      "Four-year undergraduate program in mechanical systems, thermodynamics, and manufacturing.",
-    duration: "4 years",
-  },
-  {
-    id: "mtech-cse",
-    name: "M.Tech in Computer Science and Engineering",
-    type: "pg",
-    description:
-      "Two-year postgraduate program with specializations in AI, data science, and advanced computing.",
-    duration: "2 years",
-  },
-  {
-    id: "mtech-ece",
-    name: "M.Tech in Electronics and Communication",
-    type: "pg",
-    description:
-      "Two-year postgraduate program with focus on advanced electronics and communication systems.",
-    duration: "2 years",
-  },
-  {
-    id: "phd-cse",
-    name: "Ph.D in Computer Science",
-    type: "phd",
-    description:
-      "Research-focused doctoral program in computer science and related fields.",
-    duration: "3-5 years",
-  },
-];
+interface MappedCourse extends Course {
+  type: "ug" | "pg" | "phd";
+}
 
 const CourseSelection = () => {
   const navigate = useNavigate();
   const [selectedType, setSelectedType] = React.useState<
     "all" | "ug" | "pg" | "phd"
   >("all");
+  const [courses, setCourses] = React.useState<MappedCourse[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const fetchCourses = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      console.log("CourseSelection: Fetching courses...");
+      const { data, error } = await supabase
+        .from("courses")
+        .select("*")
+        .order("type");
+
+      if (error) throw error;
+
+      console.log("CourseSelection: Courses fetched:", data);
+      if (data) {
+        // Map database courses to UI courses with proper types
+        const mappedCourses = data.map((course) => {
+          // Map database type to UI type
+          let uiType: "ug" | "pg" | "phd";
+          if (course.type === "btech" || course.type === "bsc-bed") {
+            uiType = "ug";
+          } else if (
+            course.type === "mtech" ||
+            course.type === "msc" ||
+            course.type === "mca" ||
+            course.type === "mba" ||
+            course.type === "ma"
+          ) {
+            uiType = "pg";
+          } else {
+            uiType = "phd";
+          }
+
+          return {
+            ...course,
+            type: uiType,
+          };
+        });
+
+        setCourses(mappedCourses);
+      }
+    } catch (err) {
+      console.error("Error fetching courses:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchCourses();
+
+    // Set up real-time subscription for course updates
+    const unsubscribe = subscribeToContentUpdates((payload) => {
+      console.log("CourseSelection: Subscription payload received:", payload);
+      if (payload.table === "courses") {
+        console.log("CourseSelection: Course change detected, refreshing...");
+        fetchCourses(); // Refetch all courses when there's an update
+      }
+    });
+
+    // Set up a manual refresh interval as a fallback
+    const intervalId = setInterval(() => {
+      console.log("CourseSelection: Interval refresh of courses");
+      fetchCourses();
+    }, 10000); // Refresh every 10 seconds
+
+    return () => {
+      unsubscribe();
+      clearInterval(intervalId);
+    };
+  }, [fetchCourses]);
 
   const filteredCourses =
     selectedType === "all"
@@ -83,6 +110,14 @@ const CourseSelection = () => {
   const handleCourseSelect = (courseId: string) => {
     navigate(`/student/application/${courseId}`);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 p-6 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A2240]"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
@@ -124,7 +159,13 @@ const CourseSelection = () => {
             <Card key={course.id} className="overflow-hidden">
               <CardHeader className="bg-[#0A2240]/5 pb-4">
                 <CardTitle>{course.name}</CardTitle>
-                <CardDescription>{course.duration}</CardDescription>
+                <CardDescription>
+                  {course.type === "ug"
+                    ? "Undergraduate"
+                    : course.type === "pg"
+                      ? "Postgraduate"
+                      : "Research"}
+                </CardDescription>
               </CardHeader>
               <CardContent className="pt-4">
                 <p className="text-gray-700">{course.description}</p>

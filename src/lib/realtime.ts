@@ -2,7 +2,8 @@ import { supabase } from "./supabase";
 
 // Function to set up real-time subscription for content updates
 export const subscribeToContentUpdates = (callback: (payload: any) => void) => {
-  const subscription = supabase
+  // Subscribe to content table changes
+  const contentSubscription = supabase
     .channel("content-changes")
     .on(
       "postgres_changes",
@@ -18,8 +19,26 @@ export const subscribeToContentUpdates = (callback: (payload: any) => void) => {
     )
     .subscribe();
 
+  // Subscribe to courses table changes with a unique channel name
+  const coursesSubscription = supabase
+    .channel(`courses-changes-${Math.random().toString(36).substring(2, 9)}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "courses",
+      },
+      (payload) => {
+        console.log("Courses update received:", payload);
+        callback(payload);
+      },
+    )
+    .subscribe();
+
   return () => {
-    subscription.unsubscribe();
+    contentSubscription.unsubscribe();
+    coursesSubscription.unsubscribe();
   };
 };
 
