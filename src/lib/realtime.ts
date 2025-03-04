@@ -2,9 +2,9 @@ import { supabase } from "./supabase";
 
 // Function to set up real-time subscription for content updates
 export const subscribeToContentUpdates = (callback: (payload: any) => void) => {
-  // Subscribe to content table changes
+  // Subscribe to content table changes with a unique channel name
   const contentSubscription = supabase
-    .channel("content-changes")
+    .channel(`content-changes-${Math.random().toString(36).substring(2, 9)}`)
     .on(
       "postgres_changes",
       {
@@ -14,7 +14,15 @@ export const subscribeToContentUpdates = (callback: (payload: any) => void) => {
       },
       (payload) => {
         console.log("Content update received:", payload);
-        callback(payload);
+        // Force callback to run even if the payload looks the same
+        // Use a longer timeout to ensure the database has fully processed the change
+        setTimeout(() => {
+          console.log("Executing callback for content update");
+          callback({
+            ...payload,
+            table: "content",
+          });
+        }, 300);
       },
     )
     .subscribe();
@@ -31,7 +39,10 @@ export const subscribeToContentUpdates = (callback: (payload: any) => void) => {
       },
       (payload) => {
         console.log("Courses update received:", payload);
-        callback(payload);
+        callback({
+          ...payload,
+          table: "courses",
+        });
       },
     )
     .subscribe();

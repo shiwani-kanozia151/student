@@ -1,34 +1,34 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 
-interface AcademicSection {
+interface AdministrationSection {
   id: string;
   title: string;
   content: string;
 }
 
-const AcademicEditor = () => {
-  const [sections, setSections] = React.useState<AcademicSection[]>([
+const AdministrationEditor = () => {
+  const [sections, setSections] = React.useState<AdministrationSection[]>([
     {
       id: "1",
-      title: "Academic System",
+      title: "Overview",
       content:
-        "The academic system at the National Institute of Technology (NIT) in Tiruchirappalli is renowned for its rigorous standards and commitment to excellence in education. As one of the premier engineering institutions in India, NIT, Tiruchirappalli offers a comprehensive range of undergraduate, postgraduate, and doctoral programs across various disciplines, including engineering, science, management, and architecture. The academic curriculum is designed to impart both theoretical knowledge and practical skills, ensuring that students are well-equipped to meet the demands of the rapidly evolving technological landscape.",
+        "The NITs were carved out of 17 Regional Engineering Colleges across India and are now the fully funded institutions under the Central Government and declared as an Institute of National importance under the NATIONAL INSTITUTES OF TECHNOLOGY ACT, 2007. The move was intended to make the institutions centers of excellence and being developed as autonomous and flexible academic institutions of excellence to meet the sweeping changes taking place in the industrial environment in post liberalized India and also the rapidly changing scene of technical education globally. NIT Tiruchirappalli is one among the 31 NITs and its basic structure of organisation, functions and powers of the Institute are briefed in the NIT Acts & Statutes. A large number of rules, regulations, ordinances, policy decisions etc. have been formulated by the Board of Governors, Senate and other authorities of the Institute for regulating the day-to-day work of the expanded activities of the Institute.",
     },
     {
       id: "2",
-      title: "Holistic Approach",
+      title: "Procedure followed in Decision Making Process",
       content:
-        "NIT, Tiruchirappalli's academic system emphasizes a holistic approach to education, with a strong emphasis on research, innovation, and industry collaboration. The institute boasts state-of-the-art laboratories, research facilities, and centers of excellence, providing students with ample opportunities to engage in cutting-edge research and project work. Additionally, the faculty members at NIT, Tiruchirappalli are renowned experts in their respective fields, dedicated to nurturing students' intellectual curiosity and fostering a spirit of inquiry and innovation.",
+        "The Institute has a Director, Six Deans, Registrar and Heads of the Departments/section, who carry out the various functions of the Institute as per procedures laid down in the Statues of the Institute. The decision is communicated to public by notices, announcements, website and advertisements. The final authority to vet the final decision is the Director / Board of Governors / Council for NITs/ Visitor of the Institute. The Institute takes decision regarding students' affairs, faculty & staff affairs, facilities of the Institute and its infrastructure.",
     },
     {
       id: "3",
-      title: "Contact Details",
+      title: "Mode of Public Participation",
       content:
-        "Dean (Academic)\nNational Institute of Technology\nTiruchirappalli - 620 015\nTamil Nadu, India\n\nTelephone: +91 (431) 2503014 (Office), 2503013 (Direct)\nFax: +91 (431) 2500133 (O/o the Director)\nE-mail: deanap@nitt.edu",
+        "The Institute encourages public participation and guidance through members representing them in the NIT Council and the Board",
     },
   ]);
 
@@ -60,8 +60,8 @@ const AcademicEditor = () => {
       // Save changes to backend
       const { error } = await supabase.from("content").upsert([
         {
-          type: "academic",
-          title: "Academic Content",
+          type: "administration",
+          title: "Administration Content",
           content: sections,
         },
       ]);
@@ -69,17 +69,18 @@ const AcademicEditor = () => {
       if (error) throw error;
 
       // Force a refresh to show updated content
-      alert("Academic content updated successfully!");
+      alert("Administration content updated successfully!");
       window.location.reload();
     } catch (err) {
-      console.error("Error saving academic content:", err);
+      console.error("Error saving administration content:", err);
+      alert(`Error saving content: ${err.message}`);
     }
   };
 
   return (
     <div className="space-y-6 bg-white p-6 rounded-lg shadow-md">
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold">Add Academic Section</h3>
+        <h3 className="text-xl font-semibold">Add Administration Section</h3>
         <Input
           placeholder="Section Title"
           value={newTitle}
@@ -95,7 +96,9 @@ const AcademicEditor = () => {
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold">Current Academic Sections</h3>
+        <h3 className="text-xl font-semibold">
+          Current Administration Sections
+        </h3>
         {sections.map((section) => (
           <div key={section.id} className="border p-4 rounded-lg space-y-2">
             <div className="flex justify-between items-start">
@@ -130,4 +133,4 @@ const AcademicEditor = () => {
   );
 };
 
-export default AcademicEditor;
+export default AdministrationEditor;

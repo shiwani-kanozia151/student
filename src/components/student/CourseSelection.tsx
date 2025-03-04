@@ -90,15 +90,16 @@ const CourseSelection = () => {
       }
     });
 
-    // Set up a manual refresh interval as a fallback
-    const intervalId = setInterval(() => {
-      console.log("CourseSelection: Interval refresh of courses");
+    // Listen for custom course update events
+    const handleCustomUpdate = () => {
+      console.log("CourseSelection: Custom course update event detected");
       fetchCourses();
-    }, 10000); // Refresh every 10 seconds
+    };
+    window.addEventListener("course-update", handleCustomUpdate);
 
     return () => {
       unsubscribe();
-      clearInterval(intervalId);
+      window.removeEventListener("course-update", handleCustomUpdate);
     };
   }, [fetchCourses]);
 

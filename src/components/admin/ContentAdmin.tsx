@@ -3,6 +3,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AboutUsEditor from "./content/AboutUsEditor";
 import NewsEditor from "./content/NewsEditor";
 import AcademicEditor from "./content/AcademicEditor";
+import AdministrationEditor from "./content/AdministrationEditor";
+
 import CourseEditor from "./content/CourseEditor";
 import NavbarEditor from "./content/NavbarEditor";
 import { supabase } from "@/lib/supabase";
@@ -74,10 +76,11 @@ const ContentAdmin = () => {
         )}
 
         <Tabs defaultValue="about" className="w-full">
-          <TabsList className="grid grid-cols-2 lg:grid-cols-5 w-full mb-6">
+          <TabsList className="grid grid-cols-2 lg:grid-cols-6 w-full mb-6">
             <TabsTrigger value="about">About Us</TabsTrigger>
             <TabsTrigger value="news">News</TabsTrigger>
             <TabsTrigger value="academic">Academic</TabsTrigger>
+            <TabsTrigger value="administration">Administration</TabsTrigger>
             <TabsTrigger value="courses">Courses</TabsTrigger>
             <TabsTrigger value="navbar">Navigation</TabsTrigger>
           </TabsList>
@@ -98,6 +101,10 @@ const ContentAdmin = () => {
             <AcademicEditor
               initialContent={data.content.filter((c) => c.type === "academic")}
             />
+          </TabsContent>
+
+          <TabsContent value="administration" className="mt-0">
+            <AdministrationEditor />
           </TabsContent>
 
           <TabsContent value="courses" className="mt-0">

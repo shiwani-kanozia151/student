@@ -16,18 +16,28 @@ const NewsTicker = ({
   const [announcements, setAnnouncements] =
     React.useState(defaultAnnouncements);
 
-  React.useEffect(() => {
-    const fetchNews = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("content")
-          .select("*")
-          .eq("type", "news")
-          .order("created_at", { ascending: false });
+  const fetchNews = React.useCallback(async () => {
+    try {
+      console.log("NewsTicker: Fetching news data...");
+      const { data, error } = await supabase
+        .from("content")
+        .select("*")
+        .eq("type", "news")
+        .order("created_at", { ascending: false });
 
-        if (error) throw error;
+      if (error) throw error;
 
-        if (data && data.length > 0) {
+      console.log("NewsTicker: News data received:", data);
+      if (data && data.length > 0) {
+        // Check if content is an array (for news items)
+        if (Array.isArray(data[0].content)) {
+          const newsItems = data[0].content.map((item: any) => {
+            return `${item.title} - ${item.content.substring(0, 100)}${item.content.length > 100 ? "..." : ""}`;
+          });
+          console.log("NewsTicker: Processed news items:", newsItems);
+          setAnnouncements(newsItems);
+        } else {
+          // Fallback for old format
           const newsItems = data.map((item) => {
             if (
               typeof item.content === "object" &&
@@ -40,24 +50,35 @@ const NewsTicker = ({
           });
           setAnnouncements(newsItems);
         }
-      } catch (err) {
-        console.error("Error fetching news:", err);
       }
-    };
+    } catch (err) {
+      console.error("Error fetching news:", err);
+    }
+  }, []);
 
+  React.useEffect(() => {
     fetchNews();
 
     // Set up real-time subscription for news updates
     const unsubscribe = subscribeToContentUpdates((payload) => {
+      console.log("NewsTicker: Subscription payload received:", payload);
       if (payload.new && payload.new.type === "news") {
+        console.log("NewsTicker: News update detected, refreshing...");
         fetchNews(); // Refetch all news when there's an update
       }
     });
 
+    // Set up a manual refresh interval as a fallback
+    const intervalId = setInterval(() => {
+      console.log("NewsTicker: Interval refresh of news");
+      fetchNews();
+    }, 10000); // Refresh every 10 seconds
+
     return () => {
       unsubscribe();
+      clearInterval(intervalId);
     };
-  }, []);
+  }, [fetchNews]);
 
   return (
     <div className="w-full bg-gray-100 border-y border-gray-200">

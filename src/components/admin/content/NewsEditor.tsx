@@ -12,14 +12,53 @@ interface NewsItem {
 }
 
 const NewsEditor = () => {
-  const [newsItems, setNewsItems] = React.useState<NewsItem[]>([
-    {
-      id: "1",
-      title: "NIRF Ranking 2024",
-      content: "First among NITs, Ninth in Engineering....",
-      date: new Date().toISOString(),
-    },
-  ]);
+  const [newsItems, setNewsItems] = React.useState<NewsItem[]>([]);
+
+  // Fetch existing news items on component mount
+  React.useEffect(() => {
+    const fetchNewsItems = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("content")
+          .select("*")
+          .eq("type", "news")
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        if (data && data.length > 0 && Array.isArray(data[0].content)) {
+          setNewsItems(data[0].content);
+        } else {
+          // Default news items if none found
+          setNewsItems([
+            {
+              id: "1",
+              title: "NIRF Ranking 2024",
+              content: "First among NITs, Ninth in Engineering....",
+              date: new Date().toISOString(),
+            },
+            {
+              id: "2",
+              title: "RECAL Scholarship 2024",
+              content:
+                "Application Form, last date extended till January 21, 2025....",
+              date: new Date().toISOString(),
+            },
+            {
+              id: "3",
+              title: "Congratulations to our B.Tech Students",
+              content: "For receiving prestigious awards....",
+              date: new Date().toISOString(),
+            },
+          ]);
+        }
+      } catch (err) {
+        console.error("Error fetching news items:", err);
+      }
+    };
+
+    fetchNewsItems();
+  }, []);
 
   const [newTitle, setNewTitle] = React.useState("");
   const [newContent, setNewContent] = React.useState("");
@@ -47,8 +86,31 @@ const NewsEditor = () => {
 
   const handleSave = async () => {
     try {
-      // Save changes to backend
-      const { error } = await supabase.from("content").upsert([
+      console.log("NewsEditor: Saving news items:", newsItems);
+
+      // First, delete existing news content
+      const { data: existingNews, error: fetchError } = await supabase
+        .from("content")
+        .select("id")
+        .eq("type", "news");
+
+      if (fetchError) throw fetchError;
+
+      // Delete existing news items
+      for (const news of existingNews || []) {
+        const { error: deleteError } = await supabase
+          .from("content")
+          .delete()
+          .eq("id", news.id);
+
+        if (deleteError) throw deleteError;
+      }
+
+      // Wait a moment to ensure deletions are processed
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Create new news content
+      const { error } = await supabase.from("content").insert([
         {
           type: "news",
           title: "News Updates",
@@ -59,9 +121,11 @@ const NewsEditor = () => {
       if (error) throw error;
 
       // Force a refresh to show updated content
+      alert("News updated successfully!");
       window.location.reload();
     } catch (err) {
       console.error("Error saving news:", err);
+      alert(`Error saving news: ${err.message}`);
     }
   };
 

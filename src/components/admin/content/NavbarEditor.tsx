@@ -64,7 +64,29 @@ const NavbarEditor = ({ initialNavItems }: NavbarEditorProps) => {
       // Filter out items with empty titles
       const validNavItems = navItems.filter((item) => item.title.trim() !== "");
 
-      const { error: saveError } = await supabase.from("content").upsert([
+      // First, delete existing navbar content
+      const { data: existingNavbar, error: fetchError } = await supabase
+        .from("content")
+        .select("id")
+        .eq("type", "navbar");
+
+      if (fetchError) throw fetchError;
+
+      // Delete existing navbar items
+      for (const navbar of existingNavbar || []) {
+        const { error: deleteError } = await supabase
+          .from("content")
+          .delete()
+          .eq("id", navbar.id);
+
+        if (deleteError) throw deleteError;
+      }
+
+      // Wait a moment to ensure deletions are processed
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Create new navbar content
+      const { error: saveError } = await supabase.from("content").insert([
         {
           type: "navbar",
           title: "Main Navigation",
@@ -78,6 +100,7 @@ const NavbarEditor = ({ initialNavItems }: NavbarEditorProps) => {
       setTimeout(() => setSuccess(false), 3000);
 
       // Force a refresh of the page to show updated content
+      alert("Navigation updated successfully!");
       window.location.reload();
     } catch (err) {
       console.error("Error saving navbar items:", err);

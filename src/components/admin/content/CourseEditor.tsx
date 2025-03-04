@@ -10,22 +10,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Course {
   id: string;
-  type:
-    | "btech"
-    | "mtech"
-    | "phd"
-    | "bsc-bed"
-    | "msc"
-    | "mca"
-    | "mba"
-    | "ma"
-    | "ms";
+  type: string;
   name: string;
   description: string;
   duration?: string;
+  category?: "ug" | "pg" | "research";
 }
 
 interface CourseEditorProps {
@@ -33,7 +26,8 @@ interface CourseEditorProps {
 }
 
 const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
-  const [courses, setCourses] = React.useState<Course[]>(
+  // Add category to each course
+  const processedCourses = (
     initialCourses || [
       {
         id: "1",
@@ -122,31 +116,94 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
         description: "Master of Science by research program",
         duration: "2-3 years",
       },
-    ],
-  );
+    ]
+  ).map((course) => {
+    let category: "ug" | "pg" | "research";
+    if (course.type === "btech" || course.type === "bsc-bed") {
+      category = "ug";
+    } else if (course.type === "phd" || course.type === "ms") {
+      category = "research";
+    } else {
+      category = "pg";
+    }
+    return { ...course, category };
+  });
+
+  const [courses, setCourses] = React.useState<Course[]>(processedCourses);
+  const [activeCategory, setActiveCategory] = React.useState<
+    "ug" | "pg" | "research"
+  >("ug");
+  const [activeType, setActiveType] = React.useState<string>("btech");
 
   const [newCourse, setNewCourse] = React.useState<{
-    type:
-      | "btech"
-      | "mtech"
-      | "phd"
-      | "bsc-bed"
-      | "msc"
-      | "mca"
-      | "mba"
-      | "ma"
-      | "ms";
+    type: string;
     name: string;
     description: string;
     duration: string;
-  }>({ type: "btech", name: "", description: "", duration: "" });
+    category: "ug" | "pg" | "research";
+  }>({
+    type: "btech",
+    name: "",
+    description: "",
+    duration: "",
+    category: "ug",
+  });
+
+  // Map course types to categories
+  const categoryMap = {
+    ug: ["btech", "bsc-bed"],
+    pg: ["mtech", "msc", "mca", "mba", "ma"],
+    research: ["phd", "ms"],
+  };
+
+  // Get display names for course types
+  const getTypeDisplayName = (type: string) => {
+    switch (type) {
+      case "btech":
+        return "B.Tech";
+      case "mtech":
+        return "M.Tech";
+      case "phd":
+        return "Ph.D";
+      case "bsc-bed":
+        return "B.Sc. B.Ed.";
+      case "msc":
+        return "M.Sc.";
+      case "mca":
+        return "MCA";
+      case "mba":
+        return "MBA";
+      case "ma":
+        return "MA";
+      case "ms":
+        return "M.S. (by Research)";
+      default:
+        return type;
+    }
+  };
+
+  // Get category display names
+  const getCategoryDisplayName = (category: string) => {
+    switch (category) {
+      case "ug":
+        return "Undergraduate Programs";
+      case "pg":
+        return "Postgraduate Programs";
+      case "research":
+        return "Research Programs";
+      default:
+        return category;
+    }
+  };
 
   const handleAddCourse = () => {
     if (!newCourse.name || !newCourse.description || !newCourse.duration)
       return;
 
-    setCourses([...courses, { ...newCourse, id: Date.now().toString() }]);
-    setNewCourse({ type: "btech", name: "", description: "", duration: "" });
+    // Generate a UUID-compatible ID instead of using timestamp
+    const uuid = crypto.randomUUID();
+    setCourses([...courses, { ...newCourse, id: uuid }]);
+    setNewCourse({ ...newCourse, name: "", description: "", duration: "" });
   };
 
   const handleDelete = (id: string) => {
@@ -178,12 +235,28 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
       // Then insert all current courses one by one
       if (courses.length > 0) {
         for (const course of courses) {
+          // Make sure type is one of the allowed values
+          if (
+            ![
+              "btech",
+              "mtech",
+              "phd",
+              "bsc-bed",
+              "msc",
+              "mca",
+              "mba",
+              "ma",
+              "ms",
+            ].includes(course.type)
+          ) {
+            throw new Error(`Invalid course type: ${course.type}`);
+          }
+
           const { error: insertError } = await supabase.from("courses").insert({
             id: course.id,
             name: course.name,
             type: course.type,
             description: course.description,
-            // Temporarily remove duration field until column is added
           });
 
           if (insertError) throw insertError;
@@ -194,9 +267,17 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
       }
 
       // Success message
-      alert("Courses updated successfully!");
+      alert(
+        "Courses updated successfully! The changes will be reflected on the website shortly.",
+      );
 
-      // Force a refresh to show updated content
+      // Manually trigger a refresh of the courses page by simulating a database change
+      const event = new CustomEvent("course-update", {
+        detail: { message: "Courses updated" },
+      });
+      window.dispatchEvent(event);
+
+      // Force a refresh to show updated content in the admin panel
       window.location.reload();
     } catch (err) {
       console.error("Error saving courses:", err);
@@ -204,156 +285,164 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
     }
   };
 
-  const coursesByType = courses.reduce(
+  // Update course type when category changes
+  React.useEffect(() => {
+    if (categoryMap[activeCategory] && categoryMap[activeCategory].length > 0) {
+      setActiveType(categoryMap[activeCategory][0]);
+      setNewCourse((prev) => ({
+        ...prev,
+        type: categoryMap[activeCategory][0] as any,
+        category: activeCategory,
+      }));
+    }
+  }, [activeCategory]);
+
+  // Group courses by category and type
+  const coursesByCategory = courses.reduce(
     (acc, course) => {
-      if (!acc[course.type]) {
-        acc[course.type] = [];
+      const category =
+        course.category ||
+        (course.type === "btech" || course.type === "bsc-bed"
+          ? "ug"
+          : course.type === "phd" || course.type === "ms"
+            ? "research"
+            : "pg");
+
+      if (!acc[category]) {
+        acc[category] = {};
       }
-      acc[course.type].push(course);
+
+      if (!acc[category][course.type]) {
+        acc[category][course.type] = [];
+      }
+
+      acc[category][course.type].push(course);
       return acc;
     },
-    {
-      btech: [],
-      mtech: [],
-      phd: [],
-      "bsc-bed": [],
-      msc: [],
-      mca: [],
-      mba: [],
-      ma: [],
-      ms: [],
-    } as Record<string, Course[]>,
+    {} as Record<string, Record<string, Course[]>>,
   );
 
   return (
     <div className="space-y-6 bg-white p-6 rounded-lg shadow-md">
-      <div className="space-y-4">
-        <h3 className="text-xl font-semibold">Add New Course</h3>
-        <div className="space-y-4">
-          <Select
-            value={newCourse.type}
-            onValueChange={(
-              value:
-                | "btech"
-                | "mtech"
-                | "phd"
-                | "bsc-bed"
-                | "msc"
-                | "mca"
-                | "mba"
-                | "ma"
-                | "ms",
-            ) => setNewCourse({ ...newCourse, type: value })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select course type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="btech">B.Tech</SelectItem>
-              <SelectItem value="mtech">M.Tech</SelectItem>
-              <SelectItem value="phd">Ph.D</SelectItem>
-              <SelectItem value="bsc-bed">B.Sc. B.Ed.</SelectItem>
-              <SelectItem value="msc">M.Sc.</SelectItem>
-              <SelectItem value="mca">MCA</SelectItem>
-              <SelectItem value="mba">MBA</SelectItem>
-              <SelectItem value="ma">MA</SelectItem>
-              <SelectItem value="ms">M.S. (by Research)</SelectItem>
-            </SelectContent>
-          </Select>
+      <Tabs
+        value={activeCategory}
+        onValueChange={(value) => setActiveCategory(value as any)}
+        className="w-full"
+      >
+        <TabsList className="grid grid-cols-3 w-full mb-6">
+          <TabsTrigger value="ug">Undergraduate</TabsTrigger>
+          <TabsTrigger value="pg">Postgraduate</TabsTrigger>
+          <TabsTrigger value="research">Research</TabsTrigger>
+        </TabsList>
 
-          <Input
-            placeholder="Course Name"
-            value={newCourse.name}
-            onChange={(e) =>
-              setNewCourse({ ...newCourse, name: e.target.value })
-            }
-          />
-          <Textarea
-            placeholder="Course Description"
-            value={newCourse.description}
-            onChange={(e) =>
-              setNewCourse({ ...newCourse, description: e.target.value })
-            }
-            className="min-h-[100px]"
-          />
-          <Input
-            placeholder="Duration (e.g., 4 years)"
-            value={newCourse.duration}
-            onChange={(e) =>
-              setNewCourse({ ...newCourse, duration: e.target.value })
-            }
-            className="mt-1"
-          />
-          <Button onClick={handleAddCourse}>Add Course</Button>
-        </div>
-      </div>
-
-      <div className="space-y-6">
-        <h3 className="text-xl font-semibold">Current Courses</h3>
-
-        <div className="space-y-6">
-          {[
-            "btech",
-            "mtech",
-            "phd",
-            "bsc-bed",
-            "msc",
-            "mca",
-            "mba",
-            "ma",
-            "ms",
-          ].map((type) => (
-            <div key={type} className="border rounded-lg p-4">
-              <h4 className="text-lg font-medium mb-4">
-                {type === "btech"
-                  ? "B.Tech Programs"
-                  : type === "mtech"
-                    ? "M.Tech Programs"
-                    : type === "phd"
-                      ? "Ph.D Programs"
-                      : type === "bsc-bed"
-                        ? "B.Sc. B.Ed. Programs"
-                        : type === "msc"
-                          ? "M.Sc. Programs"
-                          : type === "mca"
-                            ? "MCA Programs"
-                            : type === "mba"
-                              ? "MBA Programs"
-                              : type === "ma"
-                                ? "MA Programs"
-                                : "M.S. (by Research) Programs"}
-              </h4>
+        {Object.keys(categoryMap).map((category) => (
+          <TabsContent key={category} value={category} className="space-y-6">
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold">
+                Add New {getCategoryDisplayName(category)} Course
+              </h3>
               <div className="space-y-4">
-                {coursesByType[type]?.map((course) => (
-                  <div
-                    key={course.id}
-                    className="flex items-start justify-between border-b pb-4"
-                  >
-                    <div className="space-y-2">
-                      <h5 className="font-medium">{course.name}</h5>
-                      <p className="text-sm text-gray-600">
-                        {course.description}
-                      </p>
-                      {course.duration && (
-                        <p className="text-sm text-gray-500">
-                          Duration: {course.duration}
-                        </p>
-                      )}
-                    </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleDelete(course.id)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                ))}
+                <Select
+                  value={activeType}
+                  onValueChange={(value) => {
+                    setActiveType(value);
+                    setNewCourse({ ...newCourse, type: value as any });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select course type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categoryMap[category as keyof typeof categoryMap].map(
+                      (type) => (
+                        <SelectItem key={type} value={type}>
+                          {getTypeDisplayName(type)}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
+
+                <Input
+                  placeholder="Course Name"
+                  value={newCourse.name}
+                  onChange={(e) =>
+                    setNewCourse({ ...newCourse, name: e.target.value })
+                  }
+                />
+                <Textarea
+                  placeholder="Course Description"
+                  value={newCourse.description}
+                  onChange={(e) =>
+                    setNewCourse({ ...newCourse, description: e.target.value })
+                  }
+                  className="min-h-[100px]"
+                />
+                <Input
+                  placeholder="Duration (e.g., 4 years)"
+                  value={newCourse.duration}
+                  onChange={(e) =>
+                    setNewCourse({ ...newCourse, duration: e.target.value })
+                  }
+                  className="mt-1"
+                />
+                <Button onClick={handleAddCourse}>Add Course</Button>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
+
+            <div className="space-y-6">
+              <h3 className="text-xl font-semibold">
+                Current {getCategoryDisplayName(category)}
+              </h3>
+
+              <div className="space-y-6">
+                {categoryMap[category as keyof typeof categoryMap].map(
+                  (type) => {
+                    const coursesOfType =
+                      coursesByCategory[category]?.[type] || [];
+                    if (coursesOfType.length === 0) return null;
+
+                    return (
+                      <div key={type} className="border rounded-lg p-4">
+                        <h4 className="text-lg font-medium mb-4">
+                          {getTypeDisplayName(type)} Programs
+                        </h4>
+                        <div className="space-y-4">
+                          {coursesOfType.map((course) => (
+                            <div
+                              key={course.id}
+                              className="flex items-start justify-between border-b pb-4"
+                            >
+                              <div className="space-y-2">
+                                <h5 className="font-medium">{course.name}</h5>
+                                <p className="text-sm text-gray-600">
+                                  {course.description}
+                                </p>
+                                {course.duration && (
+                                  <p className="text-sm text-gray-500">
+                                    Duration: {course.duration}
+                                  </p>
+                                )}
+                              </div>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDelete(course.id)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  },
+                )}
+              </div>
+            </div>
+          </TabsContent>
+        ))}
+      </Tabs>
 
       <Button onClick={handleSave} className="w-full">
         Save Changes

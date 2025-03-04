@@ -54,50 +54,57 @@ const AboutUs = () => {
     ],
   });
 
+  const fetchContent = React.useCallback(async () => {
+    try {
+      console.log("AboutUs: Fetching content data...");
+      const { data, error } = await supabase
+        .from("content")
+        .select("*")
+        .eq("type", "about")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      console.log("AboutUs: Content data received:", data);
+      if (data && data.length > 0) {
+        const aboutContent = data[0].content;
+        console.log("AboutUs: Setting content data with:", aboutContent);
+        setContentData({
+          vision: aboutContent.vision || contentData.vision,
+          mission: aboutContent.mission || contentData.mission,
+          coreValues: aboutContent.coreValues || contentData.coreValues,
+          goals: aboutContent.goals || contentData.goals,
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching content:", err);
+    }
+  }, []);
+
   // Fetch content data on component mount
   React.useEffect(() => {
-    const fetchContent = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("content")
-          .select("*")
-          .eq("type", "about");
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          const aboutContent = data[0].content;
-          setContentData({
-            vision: aboutContent.vision || contentData.vision,
-            mission: aboutContent.mission || contentData.mission,
-            coreValues: aboutContent.coreValues || contentData.coreValues,
-            goals: aboutContent.goals || contentData.goals,
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching content:", err);
-      }
-    };
-
     fetchContent();
 
     // Set up real-time subscription for content updates
     const unsubscribe = subscribeToContentUpdates((payload) => {
+      console.log("AboutUs: Subscription payload received:", payload);
       if (payload.new && payload.new.type === "about") {
-        const newContent = payload.new.content;
-        setContentData({
-          vision: newContent.vision || contentData.vision,
-          mission: newContent.mission || contentData.mission,
-          coreValues: newContent.coreValues || contentData.coreValues,
-          goals: newContent.goals || contentData.goals,
-        });
+        console.log("AboutUs: About content update detected, refreshing...");
+        fetchContent();
       }
     });
 
+    // Set up a manual refresh interval as a fallback
+    const intervalId = setInterval(() => {
+      console.log("AboutUs: Interval refresh of content");
+      fetchContent();
+    }, 10000); // Refresh every 10 seconds
+
     return () => {
       unsubscribe();
+      clearInterval(intervalId);
     };
-  }, []);
+  }, [fetchContent]);
 
   return (
     <div className="min-h-screen bg-white">

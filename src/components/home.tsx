@@ -30,46 +30,55 @@ const Home = () => {
     ],
   });
 
+  const fetchContent = React.useCallback(async () => {
+    try {
+      console.log("Home: Fetching content data...");
+      const { data, error } = await supabase
+        .from("content")
+        .select("*")
+        .eq("type", "about")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      console.log("Home: Content data received:", data);
+      if (data && data.length > 0) {
+        const aboutContent = data[0].content;
+        console.log("Home: Setting content data with:", aboutContent);
+        setContentData({
+          vision: aboutContent.vision || contentData.vision,
+          mission: aboutContent.mission || contentData.mission,
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching content:", err);
+    }
+  }, []);
+
   // Fetch content data on component mount
   React.useEffect(() => {
-    const fetchContent = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("content")
-          .select("*")
-          .eq("type", "about");
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          const aboutContent = data[0].content;
-          setContentData({
-            vision: aboutContent.vision || contentData.vision,
-            mission: aboutContent.mission || contentData.mission,
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching content:", err);
-      }
-    };
-
     fetchContent();
 
     // Set up real-time subscription for content updates
     const unsubscribe = subscribeToContentUpdates((payload) => {
+      console.log("Home: Subscription payload received:", payload);
       if (payload.new && payload.new.type === "about") {
-        const newContent = payload.new.content;
-        setContentData({
-          vision: newContent.vision || contentData.vision,
-          mission: newContent.mission || contentData.mission,
-        });
+        console.log("Home: About content update detected, refreshing...");
+        fetchContent();
       }
     });
 
+    // Set up a manual refresh interval as a fallback
+    const intervalId = setInterval(() => {
+      console.log("Home: Interval refresh of content");
+      fetchContent();
+    }, 10000); // Refresh every 10 seconds
+
     return () => {
       unsubscribe();
+      clearInterval(intervalId);
     };
-  }, []);
+  }, [fetchContent]);
 
   return (
     <div className="min-h-screen bg-white">

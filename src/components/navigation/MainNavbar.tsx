@@ -14,7 +14,6 @@ const MainNavbar = ({ onLoginClick = () => {} }: MainNavbarProps) => {
     { title: "About Us", href: "/about" },
     { title: "Administration", href: "/administration" },
     { title: "Academic", href: "/academic" },
-    { title: "Admission", href: "/admission" },
     { title: "Courses", href: "/courses" },
     { title: "Student Login", href: "#", onClick: onLoginClick },
   ]);
@@ -25,7 +24,8 @@ const MainNavbar = ({ onLoginClick = () => {} }: MainNavbarProps) => {
       const { data, error } = await supabase
         .from("content")
         .select("*")
-        .eq("type", "navbar");
+        .eq("type", "navbar")
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
 

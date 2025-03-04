@@ -1,5 +1,4 @@
 import React from "react";
-import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { subscribeToContentUpdates } from "@/lib/realtime";
 
@@ -49,15 +48,16 @@ const Courses = () => {
       }
     });
 
-    // Set up a manual refresh interval as a fallback
-    const intervalId = setInterval(() => {
-      console.log("Interval refresh of courses");
+    // Listen for custom course update events
+    const handleCustomUpdate = () => {
+      console.log("Custom course update event detected");
       fetchCourses();
-    }, 10000); // Refresh every 10 seconds
+    };
+    window.addEventListener("course-update", handleCustomUpdate);
 
     return () => {
       unsubscribe();
-      clearInterval(intervalId);
+      window.removeEventListener("course-update", handleCustomUpdate);
     };
   }, [fetchCourses]);
   if (loading) {
@@ -120,12 +120,22 @@ const Courses = () => {
                       key={type}
                       className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors"
                     >
-                      <Link
-                        to={`/courses/${type}`}
+                      <a
+                        href={`#${type}`}
                         className="block font-medium"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          // Show courses of this type
+                          const coursesList = document.getElementById(
+                            `courses-${type}`,
+                          );
+                          if (coursesList) {
+                            coursesList.scrollIntoView({ behavior: "smooth" });
+                          }
+                        }}
                       >
                         {displayName}
-                      </Link>
+                      </a>
                       <p className="text-sm text-gray-600 mt-1">
                         {type === "btech"
                           ? "Undergraduate engineering and architecture programs"
@@ -179,12 +189,22 @@ const Courses = () => {
                       key={type}
                       className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors"
                     >
-                      <Link
-                        to={`/courses/${type}`}
+                      <a
+                        href={`#${type}`}
                         className="block font-medium"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          // Show courses of this type
+                          const coursesList = document.getElementById(
+                            `courses-${type}`,
+                          );
+                          if (coursesList) {
+                            coursesList.scrollIntoView({ behavior: "smooth" });
+                          }
+                        }}
                       >
                         {displayName}
-                      </Link>
+                      </a>
                       <p className="text-sm text-gray-600 mt-1">
                         {description}
                       </p>
@@ -216,12 +236,22 @@ const Courses = () => {
                       key={type}
                       className="p-3 bg-white rounded border border-gray-200 hover:bg-blue-50 transition-colors"
                     >
-                      <Link
-                        to={`/courses/${type}`}
+                      <a
+                        href={`#${type}`}
                         className="block font-medium"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          // Show courses of this type
+                          const coursesList = document.getElementById(
+                            `courses-${type}`,
+                          );
+                          if (coursesList) {
+                            coursesList.scrollIntoView({ behavior: "smooth" });
+                          }
+                        }}
                       >
                         {displayName}
-                      </Link>
+                      </a>
                       <p className="text-sm text-gray-600 mt-1">
                         {description}
                       </p>
@@ -251,6 +281,70 @@ const Courses = () => {
             </div>
           </div>
         </div>
+
+        {/* Display courses by type */}
+        {Object.entries(coursesByType).map(([type, courseList]) => {
+          if (courseList.length === 0) return null;
+
+          let displayName = "";
+          switch (type) {
+            case "btech":
+              displayName = "B. Tech. / B. Arch. Programs";
+              break;
+            case "bsc-bed":
+              displayName = "B.Sc. B.Ed. Programs";
+              break;
+            case "mtech":
+              displayName = "M. Tech. / M. Arch. Programs";
+              break;
+            case "msc":
+              displayName = "M. Sc. Programs";
+              break;
+            case "mca":
+              displayName = "MCA Programs";
+              break;
+            case "mba":
+              displayName = "MBA Programs";
+              break;
+            case "ma":
+              displayName = "MA Programs";
+              break;
+            case "ms":
+              displayName = "M.S. (by Research) Programs";
+              break;
+            case "phd":
+              displayName = "Ph. D. Programs";
+              break;
+            default:
+              displayName = `${type.toUpperCase()} Programs`;
+          }
+
+          return (
+            <div key={type} id={`courses-${type}`} className="mb-12">
+              <h2 className="text-2xl font-bold text-[#002147] mb-6">
+                {displayName}
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {courseList.map((course) => (
+                  <div
+                    key={course.id}
+                    className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
+                  >
+                    <h3 className="text-xl font-semibold text-[#002147] mb-2">
+                      {course.name}
+                    </h3>
+                    <p className="text-gray-700 mb-4">{course.description}</p>
+                    {course.duration && (
+                      <p className="text-sm text-gray-600">
+                        Duration: {course.duration}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </main>
     </div>
   );

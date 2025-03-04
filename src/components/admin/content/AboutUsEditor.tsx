@@ -22,6 +22,7 @@ interface AboutUsEditorProps {
 }
 
 const AboutUsEditor = ({ initialContent }: AboutUsEditorProps) => {
+  // Fetch the current content from the website to use as default values
   const [vision, setVision] = React.useState(
     initialContent?.content?.vision ||
       "To be a university globally trusted for technical excellence where learning and research integrate to sustain society and industry.",
@@ -93,27 +94,40 @@ const AboutUsEditor = ({ initialContent }: AboutUsEditorProps) => {
         },
       };
 
+      console.log("AboutUsEditor: Saving content data:", contentData);
+
       if (initialContent?.id) {
         // Update existing content
-        const { error: updateError } = await supabase
+        console.log(
+          "AboutUsEditor: Updating existing content with ID:",
+          initialContent.id,
+        );
+        const { data: updateData, error: updateError } = await supabase
           .from("content")
           .update(contentData)
-          .eq("id", initialContent.id);
+          .eq("id", initialContent.id)
+          .select();
 
         if (updateError) throw updateError;
+        console.log("AboutUsEditor: Update successful:", updateData);
       } else {
         // Create new content
-        const { error: insertError } = await supabase
+        console.log("AboutUsEditor: Creating new content");
+        const { data: insertData, error: insertError } = await supabase
           .from("content")
-          .insert([contentData]);
+          .insert([contentData])
+          .select();
 
         if (insertError) throw insertError;
+        console.log("AboutUsEditor: Insert successful:", insertData);
       }
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
 
-      // Force a refresh of the page to show updated content
+      // Force a refresh to show updated content
+      alert("About Us content updated successfully!");
+      // Force a reload to ensure content is updated
       window.location.reload();
     } catch (err) {
       console.error("Error saving content:", err);
