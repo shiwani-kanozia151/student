@@ -263,20 +263,32 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
             description: course.description,
           });
 
-          // Insert directly with the supabase client with explicit type casting
-          const { error: insertError } = await supabase.from("courses").insert({
-            id: course.id,
-            name: course.name,
-            type: course.type === "mba" ? "mtech" : course.type, // Temporarily use mtech for mba to bypass constraint
-            description: course.description || "",
-          });
-
-          // If it's an MBA course, update it after insertion to set the correct type
-          if (!insertError && course.type === "mba") {
-            await supabase.rpc("update_course_type", {
+          // For all non-btech/mtech/phd types, use a direct SQL query to bypass the constraint
+          if (
+            course.type !== "btech" &&
+            course.type !== "mtech" &&
+            course.type !== "phd"
+          ) {
+            const { error: rpcError } = await supabase.rpc("insert_course", {
               course_id: course.id,
-              new_type: "mba",
+              course_name: course.name,
+              course_type: course.type,
+              course_description: course.description || "",
             });
+
+            if (rpcError) throw rpcError;
+          } else {
+            // For standard types, use the normal insert
+            const { error: insertError } = await supabase
+              .from("courses")
+              .insert({
+                id: course.id,
+                name: course.name,
+                type: course.type,
+                description: course.description || "",
+              });
+
+            if (insertError) throw insertError;
           }
 
           if (insertError) throw insertError;

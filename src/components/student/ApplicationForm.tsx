@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, Upload, Check, X } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/lib/supabase";
+import { subscribeToStudentStatusUpdates } from "@/lib/realtime";
 
 interface FormData {
   // Personal Details
@@ -49,7 +50,7 @@ interface FormData {
   entranceScore: string;
   entranceRank: string;
 
-  // Academic Details - PG Only
+  // Undergraduate Details - Required for PG
   graduationSchool?: string;
   graduationPercentage?: string;
   graduationDegree?: string;
@@ -72,6 +73,7 @@ const ApplicationForm = () => {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState(false);
+  const [student, setStudent] = React.useState<any>(null);
 
   const isPG = courseId?.startsWith("mtech") || courseId?.startsWith("phd");
 
@@ -167,6 +169,58 @@ const ApplicationForm = () => {
           signature: { type: "Student Signature", file: null, uploaded: false },
         },
   );
+
+  React.useEffect(() => {
+    let unsubscribe: () => void;
+
+    const fetchStudentData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Get current user
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) throw new Error("Not authenticated");
+
+        const { data, error: fetchError } = await supabase
+          .from("students")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+
+        if (fetchError) throw fetchError;
+        setStudent(data);
+
+        // Pre-fill form data with student information
+        setFormData((prev) => ({
+          ...prev,
+          firstName: data.name.split(" ")[0] || "",
+          lastName: data.name.split(" ").slice(1).join(" ") || "",
+          department: data.department || "",
+        }));
+
+        // Set up real-time subscription for student status updates
+        unsubscribe = subscribeToStudentStatusUpdates(user.id, (payload) => {
+          if (payload.new) {
+            setStudent(payload.new);
+          }
+        });
+      } catch (err) {
+        console.error("Error fetching student data:", err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudentData();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -646,12 +700,12 @@ const ApplicationForm = () => {
                   {isPG && (
                     <div>
                       <h3 className="text-lg font-medium mb-4">
-                        Graduation Details
+                        Undergraduate Details
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                           <Label htmlFor="graduationSchool">
-                            College/University Name *
+                            College Name *
                           </Label>
                           <Input
                             id="graduationSchool"
@@ -676,7 +730,9 @@ const ApplicationForm = () => {
                           />
                         </div>
                         <div>
-                          <Label htmlFor="graduationDegree">Degree *</Label>
+                          <Label htmlFor="graduationDegree">
+                            University Name *
+                          </Label>
                           <Input
                             id="graduationDegree"
                             name="graduationDegree"
@@ -877,12 +933,12 @@ const ApplicationForm = () => {
                       {isPG && formData.graduationSchool && (
                         <div>
                           <p className="text-sm text-gray-500 font-medium">
-                            Graduation
+                            Undergraduate Details
                           </p>
                           <div className="grid grid-cols-3 gap-4 mt-1">
                             <div>
                               <p className="text-sm text-gray-500">
-                                College/University
+                                College Name
                               </p>
                               <p>{formData.graduationSchool}</p>
                             </div>
@@ -893,7 +949,9 @@ const ApplicationForm = () => {
                               <p>{formData.graduationPercentage}</p>
                             </div>
                             <div>
-                              <p className="text-sm text-gray-500">Degree</p>
+                              <p className="text-sm text-gray-500">
+                                University Name
+                              </p>
                               <p>{formData.graduationDegree}</p>
                             </div>
                           </div>

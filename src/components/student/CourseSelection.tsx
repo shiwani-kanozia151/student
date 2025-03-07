@@ -21,14 +21,16 @@ interface Course {
 }
 
 interface MappedCourse extends Course {
-  type: "ug" | "pg" | "phd";
+  category: "ug" | "pg" | "research";
+  originalType: string;
 }
 
 const CourseSelection = () => {
   const navigate = useNavigate();
-  const [selectedType, setSelectedType] = React.useState<
-    "all" | "ug" | "pg" | "phd"
-  >("all");
+  const [step, setStep] = React.useState<"category" | "courses">("category");
+  const [selectedCategory, setSelectedCategory] = React.useState<
+    "ug" | "pg" | "research" | null
+  >(null);
   const [courses, setCourses] = React.useState<MappedCourse[]>([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -45,27 +47,22 @@ const CourseSelection = () => {
 
       console.log("CourseSelection: Courses fetched:", data);
       if (data) {
-        // Map database courses to UI courses with proper types
+        // Map database courses to UI courses with proper categories
         const mappedCourses = data.map((course) => {
-          // Map database type to UI type
-          let uiType: "ug" | "pg" | "phd";
+          // Map database type to UI category
+          let category: "ug" | "pg" | "research";
           if (course.type === "btech" || course.type === "bsc-bed") {
-            uiType = "ug";
-          } else if (
-            course.type === "mtech" ||
-            course.type === "msc" ||
-            course.type === "mca" ||
-            course.type === "mba" ||
-            course.type === "ma"
-          ) {
-            uiType = "pg";
+            category = "ug";
+          } else if (course.type === "phd" || course.type === "ms") {
+            category = "research";
           } else {
-            uiType = "phd";
+            category = "pg";
           }
 
           return {
             ...course,
-            type: uiType,
+            category,
+            originalType: course.type,
           };
         });
 
@@ -103,13 +100,48 @@ const CourseSelection = () => {
     };
   }, [fetchCourses]);
 
-  const filteredCourses =
-    selectedType === "all"
-      ? courses
-      : courses.filter((course) => course.type === selectedType);
+  const filteredCourses = selectedCategory
+    ? courses.filter((course) => course.category === selectedCategory)
+    : [];
+
+  const handleCategorySelect = (category: "ug" | "pg" | "research") => {
+    setSelectedCategory(category);
+    setStep("courses");
+  };
 
   const handleCourseSelect = (courseId: string) => {
     navigate(`/student/application/${courseId}`);
+  };
+
+  const handleBackToCategories = () => {
+    setStep("category");
+    setSelectedCategory(null);
+  };
+
+  // Get display name for course type
+  const getTypeDisplayName = (type: string) => {
+    switch (type) {
+      case "btech":
+        return "B.Tech";
+      case "mtech":
+        return "M.Tech";
+      case "phd":
+        return "Ph.D";
+      case "bsc-bed":
+        return "B.Sc. B.Ed.";
+      case "msc":
+        return "M.Sc.";
+      case "mca":
+        return "MCA";
+      case "mba":
+        return "MBA";
+      case "ma":
+        return "MA";
+      case "ms":
+        return "M.S. (by Research)";
+      default:
+        return type.toUpperCase();
+    }
   };
 
   if (loading) {
@@ -123,62 +155,123 @@ const CourseSelection = () => {
   return (
     <div className="min-h-screen bg-gray-100 p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-[#0A2240]">
-            Available Courses
-          </h1>
-          <div className="flex gap-2">
-            <Button
-              variant={selectedType === "all" ? "default" : "outline"}
-              onClick={() => setSelectedType("all")}
-            >
-              All
-            </Button>
-            <Button
-              variant={selectedType === "ug" ? "default" : "outline"}
-              onClick={() => setSelectedType("ug")}
-            >
-              Undergraduate
-            </Button>
-            <Button
-              variant={selectedType === "pg" ? "default" : "outline"}
-              onClick={() => setSelectedType("pg")}
-            >
-              Postgraduate
-            </Button>
-            <Button
-              variant={selectedType === "phd" ? "default" : "outline"}
-              onClick={() => setSelectedType("phd")}
-            >
-              Ph.D
-            </Button>
-          </div>
-        </div>
+        {step === "category" ? (
+          <>
+            <div className="mb-8">
+              <h1 className="text-2xl font-bold text-[#0A2240] mb-4">
+                Select Program Category
+              </h1>
+              <p className="text-gray-600">
+                Choose a program category to view available courses
+              </p>
+            </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredCourses.map((course) => (
-            <Card key={course.id} className="overflow-hidden">
-              <CardHeader className="bg-[#0A2240]/5 pb-4">
-                <CardTitle>{course.name}</CardTitle>
-                <CardDescription>
-                  {course.type === "ug"
-                    ? "Undergraduate"
-                    : course.type === "pg"
-                      ? "Postgraduate"
-                      : "Research"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <p className="text-gray-700">{course.description}</p>
-              </CardContent>
-              <CardFooter className="border-t bg-gray-50 flex justify-end">
-                <Button onClick={() => handleCourseSelect(course.id)}>
-                  Apply Now
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card
+                className="cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => handleCategorySelect("ug")}
+              >
+                <CardHeader className="bg-[#0A2240]/5">
+                  <CardTitle>Undergraduate Programs</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <p className="text-gray-700">
+                    B.Tech, B.Arch, and other undergraduate programs
+                  </p>
+                </CardContent>
+                <CardFooter className="border-t bg-gray-50 flex justify-end">
+                  <Button>View Programs</Button>
+                </CardFooter>
+              </Card>
+
+              <Card
+                className="cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => handleCategorySelect("pg")}
+              >
+                <CardHeader className="bg-[#0A2240]/5">
+                  <CardTitle>Postgraduate Programs</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <p className="text-gray-700">
+                    M.Tech, M.Sc, MBA, MCA, and other postgraduate programs
+                  </p>
+                </CardContent>
+                <CardFooter className="border-t bg-gray-50 flex justify-end">
+                  <Button>View Programs</Button>
+                </CardFooter>
+              </Card>
+
+              <Card
+                className="cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => handleCategorySelect("research")}
+              >
+                <CardHeader className="bg-[#0A2240]/5">
+                  <CardTitle>Research Programs</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <p className="text-gray-700">
+                    Ph.D and M.S. by Research programs
+                  </p>
+                </CardContent>
+                <CardFooter className="border-t bg-gray-50 flex justify-end">
+                  <Button>View Programs</Button>
+                </CardFooter>
+              </Card>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-2xl font-bold text-[#0A2240]">
+                {selectedCategory === "ug"
+                  ? "Undergraduate Programs"
+                  : selectedCategory === "pg"
+                    ? "Postgraduate Programs"
+                    : "Research Programs"}
+              </h1>
+              <Button variant="outline" onClick={handleBackToCategories}>
+                Back to Categories
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredCourses.map((course) => (
+                <Card
+                  key={course.id}
+                  className="overflow-hidden hover:shadow-md transition-shadow"
+                >
+                  <CardHeader className="bg-[#0A2240]/5 pb-4">
+                    <CardTitle>{course.name}</CardTitle>
+                    <CardDescription>
+                      {getTypeDisplayName(course.originalType)}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <p className="text-gray-700">{course.description}</p>
+                    {course.duration && (
+                      <p className="text-sm text-gray-500 mt-2">
+                        Duration: {course.duration}
+                      </p>
+                    )}
+                  </CardContent>
+                  <CardFooter className="border-t bg-gray-50 flex justify-end">
+                    <Button onClick={() => handleCourseSelect(course.id)}>
+                      Apply Now
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+
+              {filteredCourses.length === 0 && (
+                <div className="col-span-3 text-center py-12 bg-gray-50 rounded-lg">
+                  <p className="text-gray-500">
+                    No courses available in this category
+                  </p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-type AuthStep = "EMAIL" | "OTP" | "DETAILS" | "NEW_PASSWORD";
+type AuthStep = "EMAIL" | "OTP" | "CATEGORY" | "DETAILS" | "NEW_PASSWORD";
 
 interface StudentAuthProps {
   isOpen?: boolean;
@@ -37,6 +37,9 @@ const StudentAuth = ({
   const [otp, setOtp] = React.useState("");
   const [name, setName] = React.useState("");
   const [department, setDepartment] = React.useState("");
+  const [programCategory, setProgramCategory] = React.useState<
+    "ug" | "pg" | "research" | ""
+  >("");
   const [error, setError] = React.useState("");
   const [step, setStep] = React.useState<AuthStep>("EMAIL");
   const [loading, setLoading] = React.useState(false);
@@ -75,11 +78,20 @@ const StudentAuth = ({
     setLoading(false);
 
     if (response.success) {
-      setStep("DETAILS");
+      setStep("CATEGORY");
       setError("");
     } else {
       setError(response.error || "Invalid OTP");
     }
+  };
+
+  const handleCategorySelection = () => {
+    if (!programCategory) {
+      setError("Please select a program category");
+      return;
+    }
+    setStep("DETAILS");
+    setError("");
   };
 
   const handleDetailsSubmit = () => {
@@ -98,7 +110,11 @@ const StudentAuth = ({
     }
 
     setLoading(true);
-    const response = await signUp(email, password, { name, department });
+    const response = await signUp(email, password, {
+      name,
+      department,
+      programCategory,
+    });
     setLoading(false);
 
     if (response.success) {
@@ -156,6 +172,37 @@ const StudentAuth = ({
               disabled={loading}
             >
               {loading ? "Verifying..." : "Verify OTP"}
+            </Button>
+          </div>
+        );
+
+      case "CATEGORY":
+        return (
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="programCategory">Select Program Category</Label>
+              <Select
+                value={programCategory}
+                onValueChange={(value) =>
+                  setProgramCategory(value as "ug" | "pg" | "research")
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select program category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ug">Undergraduate Programs</SelectItem>
+                  <SelectItem value="pg">Postgraduate Programs</SelectItem>
+                  <SelectItem value="research">Research Programs</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button
+              onClick={handleCategorySelection}
+              className="w-full bg-[#0A2240] hover:bg-[#0A2240]/90"
+            >
+              Continue
             </Button>
           </div>
         );
@@ -233,6 +280,7 @@ const StudentAuth = ({
           <DialogTitle className="text-2xl font-bold text-[#0A2240]">
             {step === "EMAIL" && "Student Registration"}
             {step === "OTP" && "Verify Email"}
+            {step === "CATEGORY" && "Program Category"}
             {step === "DETAILS" && "Personal Details"}
             {step === "NEW_PASSWORD" && "Create Password"}
           </DialogTitle>

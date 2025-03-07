@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { signIn } from "@/lib/auth";
+import { signIn, getCurrentUser } from "@/lib/auth";
 
 interface StudentLoginModalProps {
   isOpen?: boolean;
@@ -36,14 +36,27 @@ const StudentLoginModal = ({
     }
 
     setLoading(true);
-    const response = await signIn(email, password);
-    setLoading(false);
+    try {
+      const response = await signIn(email, password);
 
-    if (response.success) {
-      onLogin({ email });
-      onClose();
-    } else {
-      setError(response.error || "Invalid credentials");
+      if (response.success) {
+        // Get user data to ensure we have a valid session
+        const user = await getCurrentUser();
+        if (user) {
+          console.log("Login successful, user:", user);
+          onLogin({ email });
+          onClose();
+        } else {
+          throw new Error("Failed to get user data after login");
+        }
+      } else {
+        throw new Error(response.error || "Invalid credentials");
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+      setError(err.message || "Login failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
