@@ -96,6 +96,9 @@ const AboutUsEditor = ({ initialContent }: AboutUsEditorProps) => {
 
       console.log("AboutUsEditor: Saving content data:", contentData);
 
+      let updateError = null;
+      let insertError = null;
+
       if (initialContent?.id) {
         // Update existing content
         console.log(

@@ -21,7 +21,7 @@ const InstitutionalHeader = ({
     <div className="w-full bg-[#002147] text-white py-4">
       <div className="container mx-auto flex items-center justify-center gap-6 px-4">
         <div className="flex items-center gap-6">
-          <img src={logoUrl} alt="NIT Trichy Logo" className="h-24 w-24" />
+          <img src={"/NITT_logo.png" } alt="NIT Trichy Logo" className="h-24 w-24" />
           <div className="flex gap-8 items-center">
             <div className="text-xl font-semibold">
               {institutionName.english}
