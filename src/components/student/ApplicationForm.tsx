@@ -24,10 +24,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, Upload, Check, X } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/lib/supabase";
-import { subscribeToStudentStatusUpdates } from "@/lib/realtime";
 
 interface FormData {
-  // Personal Details
   firstName: string;
   middleName: string;
   lastName: string;
@@ -39,8 +37,6 @@ interface FormData {
   motherName: string;
   fatherOccupation: string;
   motherOccupation: string;
-
-  // Academic Details - Common
   tenthSchool: string;
   tenthPercentage: string;
   tenthBoard: string;
@@ -50,14 +46,11 @@ interface FormData {
   entranceExam: string;
   entranceScore: string;
   entranceRank: string;
-
-  // Undergraduate Details - Required for PG
   graduationSchool?: string;
   graduationPercentage?: string;
   graduationDegree?: string;
-
-  // Other Details
   remarks: string;
+  department: string;
 }
 
 interface UploadedDocument {
@@ -75,11 +68,12 @@ const ApplicationForm = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState(false);
   const [student, setStudent] = React.useState<any>(null);
+  const [user, setUser] = React.useState<any>(null);
 
   const isPG = courseId?.startsWith("mtech") || courseId?.startsWith("phd");
+  const courseCategory = isPG ? "PG" : "UG";
 
   const [formData, setFormData] = React.useState<FormData>({
-    // Personal Details
     firstName: "",
     middleName: "",
     lastName: "",
@@ -91,8 +85,6 @@ const ApplicationForm = () => {
     motherName: "",
     fatherOccupation: "",
     motherOccupation: "",
-
-    // Academic Details - Common
     tenthSchool: "",
     tenthPercentage: "",
     tenthBoard: "",
@@ -102,125 +94,33 @@ const ApplicationForm = () => {
     entranceExam: "",
     entranceScore: "",
     entranceRank: "",
-
-    // Academic Details - PG Only
     graduationSchool: "",
     graduationPercentage: "",
     graduationDegree: "",
-
-    // Other Details
     remarks: "",
+    department: courseCategory
   });
 
   const [documents, setDocuments] = React.useState<
     Record<string, UploadedDocument>
-  >(
-    isPG
-      ? {
-          tenthMarksheet: {
-            type: "10th Marksheet",
-            file: null,
-            uploaded: false,
-          },
-          twelfthMarksheet: {
-            type: "12th Marksheet",
-            file: null,
-            uploaded: false,
-          },
-          graduationMarksheet: {
-            type: "Graduation Marksheet",
-            file: null,
-            uploaded: false,
-          },
-          casteCertificate: {
-            type: "Caste Certificate",
-            file: null,
-            uploaded: false,
-          },
-          entranceScoreCard: {
-            type: "Entrance Score Card",
-            file: null,
-            uploaded: false,
-          },
-          photo: { type: "Student Photo", file: null, uploaded: false },
-          signature: { type: "Student Signature", file: null, uploaded: false },
-        }
-      : {
-          tenthMarksheet: {
-            type: "10th Marksheet",
-            file: null,
-            uploaded: false,
-          },
-          twelfthMarksheet: {
-            type: "12th Marksheet",
-            file: null,
-            uploaded: false,
-          },
-          casteCertificate: {
-            type: "Caste Certificate",
-            file: null,
-            uploaded: false,
-          },
-          entranceRankCard: {
-            type: "Entrance Rank Card",
-            file: null,
-            uploaded: false,
-          },
-          photo: { type: "Student Photo", file: null, uploaded: false },
-          signature: { type: "Student Signature", file: null, uploaded: false },
-        },
-  );
+  >({
+    tenthMarksheet: { type: "10th Marksheet", file: null, uploaded: false },
+    twelfthMarksheet: { type: "12th Marksheet", file: null, uploaded: false },
+    ...(isPG ? { 
+      graduationMarksheet: { type: "Graduation Marksheet", file: null, uploaded: false } 
+    } : {}),
+    casteCertificate: { type: "Caste Certificate", file: null, uploaded: false },
+    entranceScoreCard: { type: "Entrance Score Card", file: null, uploaded: false },
+    photo: { type: "Student Photo", file: null, uploaded: false },
+    signature: { type: "Student Signature", file: null, uploaded: false },
+  });
 
   React.useEffect(() => {
-    let unsubscribe: () => void;
-
-    const fetchStudentData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Get current user
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user) throw new Error("Not authenticated");
-
-        const { data, error: fetchError } = await supabase
-          .from("students")
-          .select("*")
-          .eq("id", user.id)
-          .single();
-
-        if (fetchError) throw fetchError;
-        setStudent(data);
-
-        // Pre-fill form data with student information
-        setFormData((prev) => ({
-          ...prev,
-          firstName: data.name.split(" ")[0] || "",
-          lastName: data.name.split(" ").slice(1).join(" ") || "",
-          department: data.department || "",
-        }));
-
-        // Set up real-time subscription for student status updates
-        unsubscribe = subscribeToStudentStatusUpdates(user.id, (payload) => {
-          if (payload.new) {
-            setStudent(payload.new);
-          }
-        });
-      } catch (err) {
-        console.error("Error fetching student data:", err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
     };
-
-    fetchStudentData();
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+    fetchUser();
   }, []);
 
   const handleInputChange = (
@@ -246,15 +146,13 @@ const ApplicationForm = () => {
   const uploadFile = async (file: File, path: string) => {
     const { data, error } = await supabase.storage
       .from("applications")
-      .upload(`${path}/${file.name}`, file);
+      .upload(path, file);
 
     if (error) throw error;
 
-    const {
-      data: { publicUrl },
-    } = supabase.storage
+    const { data: { publicUrl } } = supabase.storage
       .from("applications")
-      .getPublicUrl(`${path}/${file.name}`);
+      .getPublicUrl(path);
 
     return publicUrl;
   };
@@ -263,84 +161,76 @@ const ApplicationForm = () => {
     try {
       setLoading(true);
       setError(null);
-      setSuccess(false);
-  
-      // 1. Document validation
-      const requiredDocuments = isPG
-        ? [
-            "tenthMarksheet",
-            "twelfthMarksheet",
-            "graduationMarksheet", 
-            "photo",
-            "signature",
-          ]
-        : ["tenthMarksheet", "twelfthMarksheet", "photo", "signature"];
-  
-      const missingDocuments = requiredDocuments.filter(
-        doc => !documents[doc]?.file
-      );
-  
-      if (missingDocuments.length > 0) {
-        throw new Error(
-          `Missing required documents: ${missingDocuments
-            .map(d => documents[d].type)
-            .join(", ")}`
-        );
+
+      // Validate required fields
+      const requiredFields = [
+        'firstName', 'lastName', 'sex', 'age', 'contactNumber',
+        'fatherName', 'motherName', 'tenthSchool', 'tenthPercentage',
+        'twelfthSchool', 'twelfthPercentage'
+      ];
+
+      const missingFields = requiredFields.filter(field => !formData[field]);
+      if (missingFields.length > 0) {
+        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
       }
-  
-      // 2. Get authenticated user
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) throw new Error("Authentication required");
-  
-      // 3. Upload documents
+
+      // Upload documents
       const uploadedDocs = await Promise.all(
         Object.entries(documents)
           .filter(([_, doc]) => doc.file)
           .map(async ([key, doc]) => {
-            const url = await uploadFile(doc.file!, `${user.id}/${courseId}`);
+            const path = `${user.id}/${courseId}/${key}/${doc.file!.name}`;
+            const url = await uploadFile(doc.file!, path);
             return { type: doc.type, url };
           })
       );
-  
-      // 4. Prepare application data
+
+      // Prepare application data
       const applicationData = {
         student_id: user.id,
         course_id: courseId,
         personal_details: {
-          firstName: formData.firstName,
-          middleName: formData.middleName,
-          lastName: formData.lastName,
+          name: `${formData.firstName} ${formData.middleName} ${formData.lastName}`.replace(/\s+/g, ' ').trim(),
           sex: formData.sex,
           age: formData.age,
-          contactNumber: formData.contactNumber,
-          parentContactNumber: formData.parentContactNumber,
-          fatherName: formData.fatherName,
-          motherName: formData.motherName,
-          fatherOccupation: formData.fatherOccupation,
-          motherOccupation: formData.motherOccupation,
+          contact_number: formData.contactNumber,
+          parent_contact: formData.parentContactNumber,
+          father_name: formData.fatherName,
+          mother_name: formData.motherName,
+          father_occupation: formData.fatherOccupation,
+          mother_occupation: formData.motherOccupation,
         },
         academic_details: {
-          tenthSchool: formData.tenthSchool,
-          tenthPercentage: formData.tenthPercentage,
-          tenthBoard: formData.tenthBoard,
-          twelfthSchool: formData.twelfthSchool,
-          twelfthPercentage: formData.twelfthPercentage,
-          twelfthBoard: formData.twelfthBoard,
-          entranceExam: formData.entranceExam,
-          entranceScore: formData.entranceScore,
-          entranceRank: formData.entranceRank,
+          tenth: {
+            school: formData.tenthSchool,
+            percentage: formData.tenthPercentage,
+            board: formData.tenthBoard,
+          },
+          twelfth: {
+            school: formData.twelfthSchool,
+            percentage: formData.twelfthPercentage,
+            board: formData.twelfthBoard,
+          },
+          entrance: {
+            exam: formData.entranceExam,
+            score: formData.entranceScore,
+            rank: formData.entranceRank,
+          },
           ...(isPG && {
-            graduationSchool: formData.graduationSchool,
-            graduationPercentage: formData.graduationPercentage,
-            graduationDegree: formData.graduationDegree,
+            graduation: {
+              school: formData.graduationSchool,
+              percentage: formData.graduationPercentage,
+              degree: formData.graduationDegree,
+            },
           }),
         },
         documents: uploadedDocs,
-        remarks: formData.remarks,
         status: "pending",
+        remarks: formData.remarks,
+        department: formData.department,
       };
-  
-      // 5. Upsert application (handles both new and updates)
+
+      // Submit to applications table
       const { data, error: upsertError } = await supabase
         .from("applications")
         .upsert(applicationData, {
@@ -348,28 +238,35 @@ const ApplicationForm = () => {
         })
         .select()
         .single();
-  
+
       if (upsertError) throw upsertError;
-  
-      // 6. Update state and show success
+
+      // Update students table
+      const { error: studentError } = await supabase
+        .from("students")
+        .update({
+          name: `${formData.firstName} ${formData.lastName}`,
+          phone: formData.contactNumber,
+          department: formData.department,
+          status: "pending",
+        })
+        .eq("id", user.id);
+
+      if (studentError) throw studentError;
+
       setSuccess(true);
-      toast.success(
-        `Application ${data?.id ? "updated" : "submitted"} successfully`
-      );
+      toast.success("Application submitted successfully!");
       setTimeout(() => navigate("/student/dashboard"), 2000);
-  
     } catch (err) {
       console.error("Submission error:", err);
-      setError(
-        err.message.includes("duplicate key")
-          ? "You've already applied to this course"
-          : err.message || "Submission failed"
-      );
-      toast.error("Failed to submit application");
+      setError(err.message || "Failed to submit application. Please try again.");
+      toast.error(err.message || "Submission failed");
     } finally {
       setLoading(false);
     }
   };
+
+  
 
   const nextTab = () => {
     if (activeTab === "personal") setActiveTab("academic");

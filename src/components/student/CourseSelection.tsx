@@ -25,6 +25,13 @@ interface MappedCourse extends Course {
   originalType: string;
 }
 
+// Define consistent course type categories
+const COURSE_CATEGORIES = {
+  UG: ["ug_btech", "ug_bsc_bed"],
+  PG: ["pg_mtech", "pg_mca", "pg_ma", "pg_msc", "pg_mba"],
+  RESEARCH: ["phd", "ms_research"]
+};
+
 const CourseSelection = () => {
   const navigate = useNavigate();
   const [step, setStep] = React.useState<"category" | "courses">("category");
@@ -50,13 +57,17 @@ const CourseSelection = () => {
         // Map database courses to UI courses with proper categories
         const mappedCourses = data.map((course) => {
           // Map database type to UI category
-          let category: "ug" | "pg" | "research";
-          if (course.type === "btech" || course.type === "bsc-bed") {
+          let category: "ug" | "pg" | "research" | null = null;
+          
+          if (COURSE_CATEGORIES.UG.includes(course.type)) {
             category = "ug";
-          } else if (course.type === "phd" || course.type === "ms") {
+          } else if (COURSE_CATEGORIES.PG.includes(course.type)) {
+            category = "pg";
+          } else if (COURSE_CATEGORIES.RESEARCH.includes(course.type)) {
             category = "research";
           } else {
-            category = "pg";
+            console.warn(`Unknown course type: ${course.type}`);
+            return null;
           }
 
           return {
@@ -64,7 +75,7 @@ const CourseSelection = () => {
             category,
             originalType: course.type,
           };
-        });
+        }).filter(Boolean) as MappedCourse[]; // Filter out null values
 
         setCourses(mappedCourses);
       }
@@ -83,7 +94,7 @@ const CourseSelection = () => {
       console.log("CourseSelection: Subscription payload received:", payload);
       if (payload.table === "courses") {
         console.log("CourseSelection: Course change detected, refreshing...");
-        fetchCourses(); // Refetch all courses when there's an update
+        fetchCourses();
       }
     });
 
@@ -121,23 +132,23 @@ const CourseSelection = () => {
   // Get display name for course type
   const getTypeDisplayName = (type: string) => {
     switch (type) {
-      case "btech":
+      case "ug_btech":
         return "B.Tech";
-      case "mtech":
+      case "pg_mtech":
         return "M.Tech";
       case "phd":
         return "Ph.D";
-      case "bsc-bed":
+      case "ug_bsc_bed":
         return "B.Sc. B.Ed.";
-      case "msc":
+      case "pg_msc":
         return "M.Sc.";
-      case "mca":
+      case "pg_mca":
         return "MCA";
-      case "mba":
+      case "pg_mba":
         return "MBA";
-      case "ma":
+      case "pg_ma":
         return "MA";
-      case "ms":
+      case "ms_research":
         return "M.S. (by Research)";
       default:
         return type.toUpperCase();
@@ -176,7 +187,7 @@ const CourseSelection = () => {
                 </CardHeader>
                 <CardContent className="pt-4">
                   <p className="text-gray-700">
-                    B.Tech, B.Arch, and other undergraduate programs
+                    B.Tech, B.Sc. B.Ed. and other undergraduate programs
                   </p>
                 </CardContent>
                 <CardFooter className="border-t bg-gray-50 flex justify-end">
