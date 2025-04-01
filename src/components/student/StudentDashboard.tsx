@@ -4,16 +4,63 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/lib/supabase";
 import { signOut } from "@/lib/auth";
-import { subscribeToStudentStatusUpdates } from "@/lib/realtime";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
-interface StudentDashboardProps {
-  studentId?: string;
+interface Student {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  admin_remarks?: string;
+  documents?: Array<{
+    type: string;
+    url: string;
+  }>;
+  status_history?: Array<{
+    status: string;
+    changed_at: string;
+    remarks?: string;
+  }>;
 }
 
-const StudentDashboard = ({ studentId }: StudentDashboardProps) => {
-  const [student, setStudent] = React.useState<any>(null);
+const StudentDashboard = ({ studentId }: { studentId?: string }) => {
+  const [student, setStudent] = React.useState<Student | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [previewDoc, setPreviewDoc] = React.useState<{
+    type: string;
+    url: string;
+  } | null>(null);
+
+  const subscribeToStudentStatusUpdates = (
+    studentId: string,
+    callback: (payload: any) => void
+  ) => {
+    const channel = supabase
+      .channel(`student:${studentId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "students",
+          filter: `id=eq.${studentId}`,
+        },
+        callback
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  };
 
   React.useEffect(() => {
     let currentStudentId = studentId;
@@ -24,7 +71,6 @@ const StudentDashboard = ({ studentId }: StudentDashboardProps) => {
         setLoading(true);
         setError(null);
 
-        // Get current user if studentId not provided
         if (!currentStudentId) {
           const {
             data: { user },
@@ -42,18 +88,17 @@ const StudentDashboard = ({ studentId }: StudentDashboardProps) => {
         if (fetchError) throw fetchError;
         setStudent(data);
 
-        // Set up real-time subscription for student status updates
         unsubscribe = subscribeToStudentStatusUpdates(
           currentStudentId,
           (payload) => {
             if (payload.new) {
               setStudent(payload.new);
             }
-          },
+          }
         );
       } catch (err) {
         console.error("Error fetching student data:", err);
-        setError(err.message);
+        setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
         setLoading(false);
       }
@@ -82,12 +127,22 @@ const StudentDashboard = ({ studentId }: StudentDashboardProps) => {
   if (error || !student) {
     return (
       <div className="min-h-screen bg-gray-100 p-6 flex flex-col items-center justify-center">
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6 max-w-md w-full">
-          {error || "Student not found"}
-        </div>
-        <Button onClick={() => (window.location.href = "/")}>
-          Back to Home
-        </Button>
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-red-600">Error</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>{error || "Student record not found"}</p>
+            <div className="mt-4 space-x-2">
+              <Button onClick={() => window.location.reload()}>
+                Try Again
+              </Button>
+              <Button variant="outline" onClick={handleLogout}>
+                Logout
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -104,7 +159,7 @@ const StudentDashboard = ({ studentId }: StudentDashboardProps) => {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Status</CardTitle>
@@ -126,6 +181,7 @@ const StudentDashboard = ({ studentId }: StudentDashboardProps) => {
               </div>
             </CardContent>
           </Card>
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Department</CardTitle>
@@ -134,6 +190,7 @@ const StudentDashboard = ({ studentId }: StudentDashboardProps) => {
               <div className="text-2xl font-bold">{student.department}</div>
             </CardContent>
           </Card>
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">
@@ -143,6 +200,17 @@ const StudentDashboard = ({ studentId }: StudentDashboardProps) => {
             <CardContent>
               <div className="text-2xl font-bold">
                 {new Date(student.created_at).toLocaleDateString()}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Admin Remarks</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm">
+                {student.admin_remarks || "No remarks yet"}
               </div>
             </CardContent>
           </Card>
@@ -179,30 +247,41 @@ const StudentDashboard = ({ studentId }: StudentDashboardProps) => {
           <TabsContent value="documents" className="mt-0">
             <Card>
               <CardHeader>
-                <CardTitle>Uploaded Documents</CardTitle>
+                <CardTitle>Application Documents</CardTitle>
+                <p className="text-sm text-gray-500">
+                  {student.documents?.length || 0} documents uploaded
+                </p>
               </CardHeader>
               <CardContent>
-                {student.documents && student.documents.length > 0 ? (
+                {student.documents?.length ? (
                   <div className="space-y-4">
                     {student.documents.map((doc, index) => (
                       <div
                         key={index}
-                        className="flex items-center justify-between border-b pb-2"
+                        className="flex items-center justify-between p-4 border rounded-lg"
                       >
-                        <span>{doc.type}</span>
+                        <div>
+                          <p className="font-medium">{doc.type}</p>
+                          <p className="text-sm text-gray-500">
+                            {new URL(doc.url).pathname.split("/").pop()}
+                          </p>
+                        </div>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => window.open(doc.url, "_blank")}
+                          onClick={() => setPreviewDoc(doc)}
                         >
-                          View
+                          Preview
                         </Button>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-6 text-gray-500">
-                    No documents uploaded yet
+                  <div className="text-center py-6">
+                    <p className="text-gray-500">No documents uploaded</p>
+                    <Button className="mt-2" variant="link">
+                      Upload Documents
+                    </Button>
                   </div>
                 )}
               </CardContent>
@@ -210,43 +289,60 @@ const StudentDashboard = ({ studentId }: StudentDashboardProps) => {
           </TabsContent>
         </Tabs>
 
-        {student.status === "pending" && (
-          <div className="mt-6 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
-            <p className="font-medium">
-              Your application is currently under review.
-            </p>
-            {student.admin_remarks && (
-              <div className="mt-2">
-                <p className="font-medium">Admin Remarks:</p>
-                <p>{student.admin_remarks}</p>
+        {student.status_history && student.status_history.length > 0 && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Status History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {student.status_history.map((entry, index) => (
+                  <div key={index} className="flex justify-between border-b pb-2">
+                    <div>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                          entry.status === "approved"
+                            ? "bg-green-100 text-green-800"
+                            : entry.status === "rejected"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-yellow-100 text-yellow-800"
+                        }`}
+                      >
+                        {entry.status.charAt(0).toUpperCase() +
+                          entry.status.slice(1)}
+                      </span>
+                      <p className="text-xs text-gray-500">
+                        {new Date(entry.changed_at).toLocaleString()}
+                      </p>
+                    </div>
+                    {entry.remarks && (
+                      <p className="text-sm text-gray-600">{entry.remarks}</p>
+                    )}
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
+            </CardContent>
+          </Card>
         )}
 
-        {student.status === "rejected" && (
-          <div className="mt-6 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
-            <p className="font-medium">Your application has been rejected.</p>
-            {student.admin_remarks && (
-              <div className="mt-2">
-                <p className="font-medium">Reason for rejection:</p>
-                <p>{student.admin_remarks}</p>
-              </div>
-            )}
-            <p className="mt-2">
-              Please contact the administration for more information.
-            </p>
-          </div>
-        )}
-
-        {student.status === "approved" && (
-          <div className="mt-6 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded">
-            <p className="font-medium">Your application has been approved!</p>
-            <p className="mt-2">
-              You can now proceed with the next steps in your admission process.
-            </p>
-          </div>
-        )}
+        <Dialog open={!!previewDoc} onOpenChange={() => setPreviewDoc(null)}>
+          <DialogContent className="max-w-4xl h-[80vh]">
+            <DialogHeader>
+              <DialogTitle>{previewDoc?.type}</DialogTitle>
+            </DialogHeader>
+            <div className="h-full">
+              {previewDoc?.url.endsWith(".pdf") ? (
+                <iframe src={previewDoc.url} className="w-full h-full" />
+              ) : (
+                <img
+                  src={previewDoc?.url || ""}
+                  alt={previewDoc?.type || "Document"}
+                  className="object-contain w-full h-full"
+                />
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

@@ -10,6 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useRouter } from "next/router"; // For Next.js
+// OR
+// import { useNavigate } from "react-router-dom"; // For React Router
+
+import { supabase } from '@/lib/supabase'; // <-- THIS IS THE CRITICAL IMPORT
 
 type RegistrationStep = "EMAIL" | "OTP" | "CREATE_PASSWORD";
 
@@ -30,13 +35,15 @@ const NewStudentRegistration = ({
   const [error, setError] = React.useState("");
   const [step, setStep] = React.useState<RegistrationStep>("EMAIL");
   const [generatedOTP, setGeneratedOTP] = React.useState("");
+  const router = useRouter(); // Next.js
+  // const navigate = useNavigate(); // React Router
 
   const generateOTP = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
 
   const handleEmailSubmit = async () => {
-    if (!email) {
+    if (!email) {  // Only checks if empty
       setError("Please enter your email");
       return;
     }
@@ -56,12 +63,39 @@ const NewStudentRegistration = ({
     }
   };
 
-  const handlePasswordCreation = () => {
+  const handleCompleteRegistration = async () => {
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
       return;
     }
-    onRegister({ email, password });
+
+    try {
+      // 1. Create auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (authError) throw authError;
+
+      // 2. Save basic student data
+      const { error: dbError } = await supabase.from("student").insert({
+        email,
+        name: email.split("@")[0], // Default name
+        status: "pending",
+      });
+
+      if (dbError) throw dbError;
+
+      // 3. Redirect to profile completion
+      router.push("/student/profile-complete"); // Next.js
+      // navigate("/student/profile-complete"); // React Router
+
+      // Optional: Call parent callback
+      onRegister({ email, password });
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   const renderStep = () => {
@@ -79,7 +113,6 @@ const NewStudentRegistration = ({
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
-
             <Button
               onClick={handleEmailSubmit}
               className="w-full bg-[#0A2240] hover:bg-[#0A2240]/90"
@@ -103,7 +136,6 @@ const NewStudentRegistration = ({
                 maxLength={6}
               />
             </div>
-
             <Button
               onClick={handleOTPVerification}
               className="w-full bg-[#0A2240] hover:bg-[#0A2240]/90"
@@ -126,9 +158,8 @@ const NewStudentRegistration = ({
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-
             <Button
-              onClick={handlePasswordCreation}
+              onClick={handleCompleteRegistration}
               className="w-full bg-[#0A2240] hover:bg-[#0A2240]/90"
             >
               Create Account

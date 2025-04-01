@@ -2,6 +2,7 @@ import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -244,7 +245,7 @@ const ApplicationForm = () => {
 
   const uploadFile = async (file: File, path: string) => {
     const { data, error } = await supabase.storage
-      .from("student-documents")
+      .from("applications")
       .upload(`${path}/${file.name}`, file);
 
     if (error) throw error;
@@ -252,153 +253,119 @@ const ApplicationForm = () => {
     const {
       data: { publicUrl },
     } = supabase.storage
-      .from("student-documents")
+      .from("applications")
       .getPublicUrl(`${path}/${file.name}`);
 
     return publicUrl;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
+  const handleSubmit = async () => {
     try {
-      // Only validate required fields
-      const requiredPersonalFields = [
-        "firstName",
-        "lastName",
-        "sex",
-        "age",
-        "contactNumber",
-        "fatherName",
-        "motherName",
-      ];
-      const requiredAcademicFields = [
-        "tenthSchool",
-        "tenthPercentage",
-        "tenthBoard",
-        "twelfthSchool",
-        "twelfthPercentage",
-        "twelfthBoard",
-      ];
-      const requiredPGFields = isPG
-        ? ["graduationSchool", "graduationPercentage", "graduationDegree"]
-        : [];
-
-      const requiredFields = [
-        ...requiredPersonalFields,
-        ...requiredAcademicFields,
-        ...requiredPGFields,
-      ];
-      const missingFields = requiredFields.filter(
-        (field) => !formData[field as keyof FormData],
-      );
-
-      if (missingFields.length > 0) {
-        throw new Error(
-          `Please fill in all required fields marked with asterisks (*): ${missingFields.join(", ")}`,
-        );
-      }
-
-      // Check required documents only
+      setLoading(true);
+      setError(null);
+      setSuccess(false);
+  
+      // 1. Document validation
       const requiredDocuments = isPG
         ? [
             "tenthMarksheet",
             "twelfthMarksheet",
-            "graduationMarksheet",
+            "graduationMarksheet", 
             "photo",
             "signature",
           ]
         : ["tenthMarksheet", "twelfthMarksheet", "photo", "signature"];
-
+  
       const missingDocuments = requiredDocuments.filter(
-        (doc) => !documents[doc].file,
+        doc => !documents[doc]?.file
       );
-
+  
       if (missingDocuments.length > 0) {
         throw new Error(
-          `Please upload all required documents marked with asterisks (*): ${missingDocuments.map((d) => documents[d].type).join(", ")}`,
+          `Missing required documents: ${missingDocuments
+            .map(d => documents[d].type)
+            .join(", ")}`
         );
       }
-
-      // Get current user
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      // Upload documents
-      const uploadedDocs = [];
-      for (const [key, doc] of Object.entries(documents)) {
-        if (doc.file) {
-          const url = await uploadFile(doc.file, `${user.id}/${courseId}`);
-          uploadedDocs.push({
-            type: doc.type,
-            url,
-          });
-
-          // Update document state
-          setDocuments((prev) => ({
-            ...prev,
-            [key]: { ...prev[key], uploaded: true, url },
-          }));
-        }
-      }
-
-      // Create application record
-      const { error: applicationError } = await supabase
+  
+      // 2. Get authenticated user
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) throw new Error("Authentication required");
+  
+      // 3. Upload documents
+      const uploadedDocs = await Promise.all(
+        Object.entries(documents)
+          .filter(([_, doc]) => doc.file)
+          .map(async ([key, doc]) => {
+            const url = await uploadFile(doc.file!, `${user.id}/${courseId}`);
+            return { type: doc.type, url };
+          })
+      );
+  
+      // 4. Prepare application data
+      const applicationData = {
+        student_id: user.id,
+        course_id: courseId,
+        personal_details: {
+          firstName: formData.firstName,
+          middleName: formData.middleName,
+          lastName: formData.lastName,
+          sex: formData.sex,
+          age: formData.age,
+          contactNumber: formData.contactNumber,
+          parentContactNumber: formData.parentContactNumber,
+          fatherName: formData.fatherName,
+          motherName: formData.motherName,
+          fatherOccupation: formData.fatherOccupation,
+          motherOccupation: formData.motherOccupation,
+        },
+        academic_details: {
+          tenthSchool: formData.tenthSchool,
+          tenthPercentage: formData.tenthPercentage,
+          tenthBoard: formData.tenthBoard,
+          twelfthSchool: formData.twelfthSchool,
+          twelfthPercentage: formData.twelfthPercentage,
+          twelfthBoard: formData.twelfthBoard,
+          entranceExam: formData.entranceExam,
+          entranceScore: formData.entranceScore,
+          entranceRank: formData.entranceRank,
+          ...(isPG && {
+            graduationSchool: formData.graduationSchool,
+            graduationPercentage: formData.graduationPercentage,
+            graduationDegree: formData.graduationDegree,
+          }),
+        },
+        documents: uploadedDocs,
+        remarks: formData.remarks,
+        status: "pending",
+      };
+  
+      // 5. Upsert application (handles both new and updates)
+      const { data, error: upsertError } = await supabase
         .from("applications")
-        .insert([
-          {
-            student_id: user.id,
-            course_id: courseId,
-            personal_details: {
-              firstName: formData.firstName,
-              middleName: formData.middleName,
-              lastName: formData.lastName,
-              sex: formData.sex,
-              age: formData.age,
-              contactNumber: formData.contactNumber,
-              parentContactNumber: formData.parentContactNumber,
-              fatherName: formData.fatherName,
-              motherName: formData.motherName,
-              fatherOccupation: formData.fatherOccupation,
-              motherOccupation: formData.motherOccupation,
-            },
-            academic_details: {
-              tenthSchool: formData.tenthSchool,
-              tenthPercentage: formData.tenthPercentage,
-              tenthBoard: formData.tenthBoard,
-              twelfthSchool: formData.twelfthSchool,
-              twelfthPercentage: formData.twelfthPercentage,
-              twelfthBoard: formData.twelfthBoard,
-              entranceExam: formData.entranceExam,
-              entranceScore: formData.entranceScore,
-              entranceRank: formData.entranceRank,
-              ...(isPG
-                ? {
-                    graduationSchool: formData.graduationSchool,
-                    graduationPercentage: formData.graduationPercentage,
-                    graduationDegree: formData.graduationDegree,
-                  }
-                : {}),
-            },
-            documents: uploadedDocs,
-            remarks: formData.remarks,
-            status: "pending",
-          },
-        ]);
-
-      if (applicationError) throw applicationError;
-
+        .upsert(applicationData, {
+          onConflict: "student_id,course_id",
+        })
+        .select()
+        .single();
+  
+      if (upsertError) throw upsertError;
+  
+      // 6. Update state and show success
       setSuccess(true);
-      setTimeout(() => {
-        navigate("/student/dashboard");
-      }, 2000);
+      toast.success(
+        `Application ${data?.id ? "updated" : "submitted"} successfully`
+      );
+      setTimeout(() => navigate("/student/dashboard"), 2000);
+  
     } catch (err) {
-      console.error("Error submitting application:", err);
-      setError(err.message);
+      console.error("Submission error:", err);
+      setError(
+        err.message.includes("duplicate key")
+          ? "You've already applied to this course"
+          : err.message || "Submission failed"
+      );
+      toast.error("Failed to submit application");
     } finally {
       setLoading(false);
     }

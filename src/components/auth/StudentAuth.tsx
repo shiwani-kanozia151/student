@@ -11,15 +11,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
-type AuthStep = "EMAIL" | "OTP" | "CATEGORY" | "DETAILS" | "NEW_PASSWORD";
+// Remove "CATEGORY" from the auth steps
+type AuthStep = "EMAIL" | "OTP" | "DETAILS" | "NEW_PASSWORD";
 
 interface StudentAuthProps {
   isOpen?: boolean;
@@ -36,10 +30,6 @@ const StudentAuth = ({
   const [password, setPassword] = React.useState("");
   const [otp, setOtp] = React.useState("");
   const [name, setName] = React.useState("");
-  const [department, setDepartment] = React.useState("");
-  const [programCategory, setProgramCategory] = React.useState<
-    "ug" | "pg" | "research" | ""
-  >("");
   const [error, setError] = React.useState("");
   const [step, setStep] = React.useState<AuthStep>("EMAIL");
   const [loading, setLoading] = React.useState(false);
@@ -57,7 +47,6 @@ const StudentAuth = ({
     if (response.success) {
       setStep("OTP");
       setError("");
-      // Show the OTP in development mode
       if (response.data?.otp) {
         console.log(`Use this OTP: ${response.data.otp}`);
         alert(`Development mode: Your OTP is ${response.data.otp}`);
@@ -78,24 +67,16 @@ const StudentAuth = ({
     setLoading(false);
 
     if (response.success) {
-      setStep("CATEGORY");
+      // Skip directly to DETAILS instead of CATEGORY
+      setStep("DETAILS");
       setError("");
     } else {
       setError(response.error || "Invalid OTP");
     }
   };
 
-  const handleCategorySelection = () => {
-    if (!programCategory) {
-      setError("Please select a program category");
-      return;
-    }
-    setStep("DETAILS");
-    setError("");
-  };
-
   const handleDetailsSubmit = () => {
-    if (!name || !department) {
+    if (!name) {
       setError("Please fill in all fields");
       return;
     }
@@ -112,8 +93,7 @@ const StudentAuth = ({
     setLoading(true);
     const response = await signUp(email, password, {
       name,
-      department,
-      programCategory,
+      // Remove programCategory from the user data
     });
     setLoading(false);
 
@@ -176,37 +156,6 @@ const StudentAuth = ({
           </div>
         );
 
-      case "CATEGORY":
-        return (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="programCategory">Select Program Category</Label>
-              <Select
-                value={programCategory}
-                onValueChange={(value) =>
-                  setProgramCategory(value as "ug" | "pg" | "research")
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select program category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ug">Undergraduate Programs</SelectItem>
-                  <SelectItem value="pg">Postgraduate Programs</SelectItem>
-                  <SelectItem value="research">Research Programs</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button
-              onClick={handleCategorySelection}
-              className="w-full bg-[#0A2240] hover:bg-[#0A2240]/90"
-            >
-              Continue
-            </Button>
-          </div>
-        );
-
       case "DETAILS":
         return (
           <div className="space-y-6">
@@ -219,23 +168,6 @@ const StudentAuth = ({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="department">Department</Label>
-              <Select value={department} onValueChange={setDepartment}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select your department" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Computer Science">
-                    Computer Science
-                  </SelectItem>
-                  <SelectItem value="Electronics">Electronics</SelectItem>
-                  <SelectItem value="Mechanical">Mechanical</SelectItem>
-                  <SelectItem value="Civil">Civil</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             <Button
@@ -280,7 +212,6 @@ const StudentAuth = ({
           <DialogTitle className="text-2xl font-bold text-[#0A2240]">
             {step === "EMAIL" && "Student Registration"}
             {step === "OTP" && "Verify Email"}
-            {step === "CATEGORY" && "Program Category"}
             {step === "DETAILS" && "Personal Details"}
             {step === "NEW_PASSWORD" && "Create Password"}
           </DialogTitle>

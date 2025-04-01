@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 interface Student {
   id: string;
@@ -29,6 +30,7 @@ interface Student {
   department: string;
   status: "pending" | "approved" | "rejected";
   created_at: string;
+  admin_remarks?: string;
   documents?: {
     type: string;
     url: string;
@@ -40,9 +42,7 @@ const VerificationAdmin = () => {
   const [students, setStudents] = React.useState<Student[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [selectedStudent, setSelectedStudent] = React.useState<Student | null>(
-    null,
-  );
+  const [selectedStudent, setSelectedStudent] = React.useState<Student | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = React.useState(false);
   const [adminRemarks, setAdminRemarks] = React.useState("");
 
@@ -51,25 +51,48 @@ const VerificationAdmin = () => {
       setLoading(true);
       setError(null);
 
-      // Fetch students
       const { data: studentsData, error: studentsError } = await supabase
         .from("students")
-        .select("*")
+        .select("id, name, email, department, status, created_at, admin_remarks, documents")
         .order("created_at", { ascending: false });
 
-      if (studentsError) throw studentsError;
+      if (studentsError) {
+        throw new Error(studentsError.message);
+      }
 
       setStudents(studentsData || []);
     } catch (err) {
       console.error("Error fetching data:", err);
       setError(err.message);
+      toast.error("Failed to load students");
     } finally {
       setLoading(false);
     }
   };
 
   React.useEffect(() => {
+    // Initial fetch
     fetchData();
+
+    // Set up real-time subscription
+    const channel = supabase
+      .channel("students_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "students",
+        },
+        () => {
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleStatusUpdate = async (
@@ -77,33 +100,64 @@ const VerificationAdmin = () => {
     status: "pending" | "approved" | "rejected",
   ) => {
     try {
-      setError(null);
+      // Add duplicate check (new)
+      const { data: existing } = await supabase
+        .from('students')
+        .select('id, status')
+        .eq('email', selectedStudent?.email || '')
+        .single();
+  
+      if (existing && existing.status === status) {
+        toast.error(`Student already has ${status} status`);
+        return;
+      }
 
-      // Update student status
-      const { error: studentError } = await supabase
+   
+      // 1. Enhanced validation (NEW)
+      if ((status === "pending" || status === "rejected") && !adminRemarks.trim()) {
+        throw new Error("Remarks are required for pending or rejected status");
+      }
+  
+      // 2. Optimized Supabase query (MODIFIED)
+      const { data: updatedStudent, error: updateError } = await supabase
         .from("students")
         .update({
           status,
-          admin_remarks: adminRemarks,
+          admin_remarks: adminRemarks.trim(),
+          updated_at: new Date().toISOString(),
         })
-        .eq("id", studentId);
-
-      if (studentError) throw studentError;
-
-      // Close the dialog and refresh data
+        .eq("id", studentId)
+        .select() // NEW: Returns the updated record
+        .single();
+  
+      if (updateError) throw updateError;
+  
+      // 3. State management improvements (MODIFIED)
+      setStudents(prev => 
+        prev.map(s => s.id === studentId ? updatedStudent : s)
+      );
+  
+      // 4. User feedback (EXISTING)
+      toast.success(`Status updated to ${status}`);
       setIsDetailsOpen(false);
       setSelectedStudent(null);
       setAdminRemarks("");
-      await fetchData();
+  
     } catch (err) {
-      console.error(`Error ${status} student:`, err);
-      setError(err.message);
+      // 5. Better error handling (ENHANCED)
+      console.error("Update error:", err);
+      const message = err instanceof Error ? err.message : "Update failed";
+      setError(message);
+      toast.error(message);
     }
   };
 
   const viewStudentDetails = (studentId: string) => {
     const student = students.find((s) => s.id === studentId);
-    if (!student) return;
+    if (!student) {
+      toast.error("Student not found");
+      return;
+    }
 
     setSelectedStudent(student);
     setAdminRemarks(student.admin_remarks || "");
@@ -111,6 +165,8 @@ const VerificationAdmin = () => {
   };
 
   const filteredStudents = students.filter((student) => {
+    if (!searchTerm) return true;
+    
     const searchFields = [
       student.name,
       student.email,
@@ -159,59 +215,78 @@ const VerificationAdmin = () => {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">
-                {filteredStudents.length} students
+                {filteredStudents.length} {filteredStudents.length === 1 ? "student" : "students"}
               </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchData}
+              >
+                Refresh
+              </Button>
             </div>
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Submission Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredStudents.map((student) => (
-                <TableRow key={student.id}>
-                  <TableCell>{student.name}</TableCell>
-                  <TableCell>{student.email}</TableCell>
-                  <TableCell>{student.department}</TableCell>
-                  <TableCell>
-                    {new Date(student.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        student.status === "approved"
-                          ? "bg-green-100 text-green-800"
-                          : student.status === "rejected"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-yellow-100 text-yellow-800"
-                      }`}
-                    >
-                      {student.status.charAt(0).toUpperCase() +
-                        student.status.slice(1)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex items-center gap-1"
-                      onClick={() => viewStudentDetails(student.id)}
-                    >
-                      <Eye className="h-4 w-4" /> View Details
-                    </Button>
-                  </TableCell>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader className="bg-gray-50">
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Department</TableHead>
+                  <TableHead>Submission Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Action</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredStudents.length > 0 ? (
+                  filteredStudents.map((student) => (
+                    <TableRow key={student.id}>
+                      <TableCell className="font-medium">{student.name}</TableCell>
+                      <TableCell>{student.email}</TableCell>
+                      <TableCell>{student.department}</TableCell>
+                      <TableCell>
+                        {new Date(student.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                            student.status === "approved"
+                              ? "bg-green-100 text-green-800"
+                              : student.status === "rejected"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-yellow-100 text-yellow-800"
+                          }`}
+                        >
+                          {student.status.charAt(0).toUpperCase() +
+                            student.status.slice(1)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex items-center gap-1"
+                          onClick={() => viewStudentDetails(student.id)}
+                        >
+                          <Eye className="h-4 w-4" /> View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8">
+                      {students.length === 0
+                        ? "No students found"
+                        : "No matching students found"}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       </div>
 
@@ -220,7 +295,7 @@ const VerificationAdmin = () => {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold text-[#0A2240]">
-              Student Details
+              Student Verification
             </DialogTitle>
           </DialogHeader>
 
@@ -251,17 +326,14 @@ const VerificationAdmin = () => {
                       Registration Date
                     </Label>
                     <p className="font-medium">
-                      {new Date(
-                        selectedStudent.created_at,
-                      ).toLocaleDateString()}
+                      {new Date(selectedStudent.created_at).toLocaleDateString()}
                     </p>
                   </div>
                 </div>
               </TabsContent>
 
               <TabsContent value="documents" className="space-y-4">
-                {selectedStudent.documents &&
-                selectedStudent.documents.length > 0 ? (
+                {selectedStudent.documents?.length ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {selectedStudent.documents.map((doc, index) => (
                       <div key={index} className="border rounded-lg p-4">
@@ -302,7 +374,7 @@ const VerificationAdmin = () => {
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <div className="mb-4">
                     <Label className="text-sm text-gray-500">
-                      Student Status
+                      Current Status
                     </Label>
                     <p className="font-medium">
                       <span
@@ -321,63 +393,49 @@ const VerificationAdmin = () => {
                   </div>
 
                   <div className="mb-6">
-                    <Label
-                      htmlFor="adminRemarks"
-                      className="text-sm text-gray-500"
-                    >
-                      Admin Remarks (required for pending or rejected status)
+                    <Label htmlFor="adminRemarks" className="block text-sm text-gray-500 mb-1">
+                      Admin Remarks
+                      {(selectedStudent.status === "pending" || selectedStudent.status === "rejected") && (
+                        <span className="text-red-500"> *</span>
+                      )}
                     </Label>
                     <Textarea
                       id="adminRemarks"
                       value={adminRemarks}
                       onChange={(e) => setAdminRemarks(e.target.value)}
-                      placeholder="Add verification remarks here explaining why the application is pending or rejected..."
+                      placeholder="Add verification remarks here..."
                       className="mt-1"
                       rows={4}
+                      required={
+                        selectedStudent.status === "pending" ||
+                        selectedStudent.status === "rejected"
+                      }
                     />
                   </div>
 
-                  <div className="flex justify-between gap-2">
+                  <div className="flex flex-col sm:flex-row justify-between gap-4">
                     <Button
                       variant="outline"
-                      onClick={() => {
-                        if (!adminRemarks.trim()) {
-                          setError(
-                            "Please provide remarks when keeping an application pending",
-                          );
-                          return;
-                        }
-                        handleStatusUpdate(selectedStudent.id, "pending");
-                      }}
+                      onClick={() => handleStatusUpdate(selectedStudent.id, "pending")}
                       disabled={selectedStudent.status === "pending"}
                       className="bg-yellow-50 hover:bg-yellow-100 text-yellow-800 border-yellow-200"
                     >
                       Keep Pending
                     </Button>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <Button
                         variant="destructive"
-                        onClick={() => {
-                          if (!adminRemarks.trim()) {
-                            setError(
-                              "Please provide remarks when rejecting an application",
-                            );
-                            return;
-                          }
-                          handleStatusUpdate(selectedStudent.id, "rejected");
-                        }}
+                        onClick={() => handleStatusUpdate(selectedStudent.id, "rejected")}
                         disabled={selectedStudent.status === "rejected"}
                       >
-                        Reject Student
+                        Reject
                       </Button>
                       <Button
                         className="bg-green-600 hover:bg-green-700"
-                        onClick={() =>
-                          handleStatusUpdate(selectedStudent.id, "approved")
-                        }
+                        onClick={() => handleStatusUpdate(selectedStudent.id, "approved")}
                         disabled={selectedStudent.status === "approved"}
                       >
-                        Approve Student
+                        Approve
                       </Button>
                     </div>
                   </div>
