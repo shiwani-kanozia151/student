@@ -10,21 +10,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 
 // Define valid course types based on your database constraints
 const VALID_COURSE_TYPES = [
-  'ug_btech',
-  'ug_bsc_bed',
-  'pg_mtech',
-  'pg_mca',
-  'pg_ma',
-  'pg_msc',
-  'pg_mba',
-  'phd'
+  'btech',
+  'bsc_bed',
+  'mtech',
+  'mca',
+  'ma',
+  'msc',
+  'mba',
+  'phd',
+  'ms_research'
 ] as const;
 
 type CourseType = typeof VALID_COURSE_TYPES[number];
+type CourseCategory = "ug" | "pg" | "research";
 
 interface Course {
   id: string;
@@ -34,7 +41,7 @@ interface Course {
   duration: string;
   curriculum?: string[];
   eligibility?: string;
-  category?: "ug" | "pg" | "research";
+  category?: CourseCategory;
 }
 
 interface CourseEditorProps {
@@ -42,12 +49,35 @@ interface CourseEditorProps {
 }
 
 const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
-  // Initialize courses with proper types and additional fields
+  // Helper to get category from type
+  const getCategoryFromType = (type: CourseType): CourseCategory => {
+    if (['btech', 'bsc_bed'].includes(type)) return 'ug';
+    if (['phd', 'ms_research'].includes(type)) return 'research';
+    return 'pg';
+  };
+
+  // Helper to get display name
+  const getTypeDisplayName = (type: CourseType): string => {
+    const typeMap: Record<CourseType, string> = {
+      "btech": "B.Tech",
+      "bsc_bed": "B.Sc B.Ed",
+      "mtech": "M.Tech",
+      "mca": "MCA",
+      "ma": "MA",
+      "msc": "M.Sc",
+      "mba": "MBA",
+      "phd": "Ph.D",
+      "ms_research": "M.S. (Research)"
+    };
+    return typeMap[type];
+  };
+
+  // Initialize courses with proper types and categories
   const processedCourses = (
     initialCourses || [
       {
         id: "1",
-        type: "ug_btech",
+        type: "btech",
         name: "Computer Science and Engineering",
         description: "B.Tech program in Computer Science and Engineering",
         duration: "4 years",
@@ -58,64 +88,31 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
           "Fourth Year: Projects and Electives"
         ],
         eligibility: "10+2 with Physics, Chemistry, and Mathematics"
-      },
-      // Other courses with similar structure...
+      }
     ]
-  ).map((course) => {
-    let category: "ug" | "pg" | "research" = "pg"; // default
-    if (course.type.startsWith('ug_')) {
-      category = "ug";
-    } else if (course.type.startsWith('pg_')) {
-      category = "pg";
-    } else if (course.type === 'phd') {
-      category = "research";
-    }
-    return { ...course, category };
-  });
+  ).map((course) => ({
+    ...course,
+    category: getCategoryFromType(course.type)
+  }));
 
   const [courses, setCourses] = React.useState<Course[]>(processedCourses);
-  const [activeCategory, setActiveCategory] = React.useState<"ug" | "pg" | "research">("ug");
-  const [activeType, setActiveType] = React.useState<CourseType>("ug_btech");
+  const [activeCategory, setActiveCategory] = React.useState<CourseCategory>("ug");
   const [newCourse, setNewCourse] = React.useState<Omit<Course, 'id'> & { curriculumInput: string }>({
-    type: "ug_btech",
+    type: "btech",
     name: "",
     description: "",
     duration: "",
     curriculum: [],
     eligibility: "",
-    curriculumInput: "", // Temporary input for curriculum items
+    curriculumInput: "",
     category: "ug"
   });
 
   // Map course types to categories
-  const categoryMap = {
-    ug: ["ug_btech", "ug_bsc_bed"],
-    pg: ["pg_mtech", "pg_mca", "pg_ma", "pg_msc", "pg_mba"],
-    research: ["phd"]
-  };
-
-  // Helper functions
-  const getTypeDisplayName = (type: CourseType) => {
-    switch (type) {
-      case "ug_btech": return "B.Tech";
-      case "ug_bsc_bed": return "B.Sc B.Ed";
-      case "pg_mtech": return "M.Tech";
-      case "pg_mca": return "MCA";
-      case "pg_ma": return "MA";
-      case "pg_msc": return "M.Sc";
-      case "pg_mba": return "MBA";
-      case "phd": return "Ph.D";
-      default: return type;
-    }
-  };
-
-  const getCategoryDisplayName = (category: string) => {
-    switch (category) {
-      case "ug": return "Undergraduate Programs";
-      case "pg": return "Postgraduate Programs";
-      case "research": return "Research Programs";
-      default: return category;
-    }
+  const categoryMap: Record<CourseCategory, CourseType[]> = {
+    ug: ["btech", "bsc_bed"],
+    pg: ["mtech", "mca", "ma", "msc", "mba"],
+    research: ["phd", "ms_research"]
   };
 
   const handleAddCurriculumItem = () => {
@@ -145,9 +142,9 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
       curriculum: newCourse.curriculum || []
     }]);
     
-    // Reset form but keep current category/type
+    // Reset form but keep current category
     setNewCourse({
-      type: categoryMap[activeCategory][0] as CourseType,
+      type: categoryMap[activeCategory][0],
       name: "",
       description: "",
       duration: "",
@@ -164,6 +161,16 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
 
   const handleSave = async () => {
     try {
+      // Validate all courses before saving
+      const invalidCourses = courses.filter(
+        course => !VALID_COURSE_TYPES.includes(course.type)
+      );
+      
+      if (invalidCourses.length > 0) {
+        const invalidTypes = invalidCourses.map(c => c.type).join(", ");
+        throw new Error(`Invalid course types found: ${invalidTypes}`);
+      }
+
       // Delete existing courses
       const { data: existingCourses, error: fetchError } = await supabase
         .from("courses")
@@ -181,10 +188,6 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
 
       // Insert current courses
       for (const course of courses) {
-        if (!VALID_COURSE_TYPES.includes(course.type)) {
-          throw new Error(`Invalid course type: ${course.type}`);
-        }
-
         const { error } = await supabase.from("courses").insert({
           id: course.id,
           name: course.name,
@@ -199,7 +202,7 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
-      alert("Courses updated successfully!");
+      alert("Courses saved successfully!");
       window.location.reload();
     } catch (err) {
       console.error("Error saving courses:", err);
@@ -207,37 +210,27 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
     }
   };
 
-  // Update course type when category changes
-  React.useEffect(() => {
-    if (categoryMap[activeCategory]?.length > 0) {
-      const newType = categoryMap[activeCategory][0] as CourseType;
-      setActiveType(newType);
-      setNewCourse(prev => ({
-        ...prev,
-        type: newType,
-        category: activeCategory
-      }));
-    }
-  }, [activeCategory]);
-
   // Group courses by category and type
-  const coursesByCategory = React.useMemo(() => {
-    return courses.reduce((acc, course) => {
-      const category = course.category || 
-        (course.type.startsWith('ug_') ? "ug" : 
-         course.type.startsWith('pg_') ? "pg" : "research");
-
-      if (!acc[category]) acc[category] = {};
-      if (!acc[category][course.type]) acc[category][course.type] = [];
-      
-      acc[category][course.type].push(course);
-      return acc;
-    }, {} as Record<string, Record<string, Course[]>>);
-  }, [courses]);
+  // Change this line (around line 218):
+const coursesByCategory = React.useMemo(() => {
+  return courses.reduce((acc, course) => {
+    const category = course.category || getCategoryFromType(course.type);
+    
+    if (!acc[category]) acc[category] = {};
+    if (!acc[category][course.type]) acc[category][course.type] = [];
+    
+    acc[category][course.type].push(course);
+    return acc;
+  }, {} as Record<CourseCategory, Partial<Record<CourseType, Course[]>>>); // Updated type
+}, [courses]);
 
   return (
     <div className="space-y-6 bg-white p-6 rounded-lg shadow-md">
-      <Tabs value={activeCategory} onValueChange={(v) => setActiveCategory(v as any)} className="w-full">
+      <Tabs 
+        value={activeCategory} 
+        onValueChange={(v) => setActiveCategory(v as CourseCategory)}
+        className="w-full"
+      >
         <TabsList className="grid grid-cols-3 w-full mb-6">
           <TabsTrigger value="ug">Undergraduate</TabsTrigger>
           <TabsTrigger value="pg">Postgraduate</TabsTrigger>
@@ -248,15 +241,20 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
           <TabsContent key={category} value={category} className="space-y-6">
             <div className="space-y-4">
               <h3 className="text-xl font-semibold">
-                Add New {getCategoryDisplayName(category)} Course
+                Add New {category === 'ug' ? 'Undergraduate' : 
+                        category === 'pg' ? 'Postgraduate' : 'Research'} Course
               </h3>
               
               <div className="space-y-4">
                 <Select
                   value={newCourse.type}
                   onValueChange={(value) => {
-                    setActiveType(value as CourseType);
-                    setNewCourse({ ...newCourse, type: value as CourseType });
+                    const courseType = value as CourseType;
+                    setNewCourse({ 
+                      ...newCourse, 
+                      type: courseType,
+                      category: getCategoryFromType(courseType)
+                    });
                   }}
                 >
                   <SelectTrigger>
@@ -265,7 +263,7 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
                   <SelectContent>
                     {types.map((type) => (
                       <SelectItem key={type} value={type}>
-                        {getTypeDisplayName(type as CourseType)}
+                        {getTypeDisplayName(type)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -336,18 +334,19 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
 
             <div className="space-y-6">
               <h3 className="text-xl font-semibold">
-                Current {getCategoryDisplayName(category)}
+                Current {category === 'ug' ? 'Undergraduate' : 
+                        category === 'pg' ? 'Postgraduate' : 'Research'} Courses
               </h3>
 
               <div className="space-y-6">
                 {types.map((type) => {
-                  const coursesOfType = coursesByCategory[category]?.[type] || [];
+                  const coursesOfType = coursesByCategory[category as CourseCategory]?.[type] || [];
                   if (coursesOfType.length === 0) return null;
 
                   return (
                     <div key={type} className="border rounded-lg p-4">
                       <h4 className="text-lg font-medium mb-4">
-                        {getTypeDisplayName(type as CourseType)} Programs
+                        {getTypeDisplayName(type)} Programs
                       </h4>
                       <div className="space-y-4">
                         {coursesOfType.map((course) => (

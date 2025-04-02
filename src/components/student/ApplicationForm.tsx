@@ -67,16 +67,28 @@ const ApplicationForm = () => {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState(false);
-  const [student, setStudent] = React.useState<any>(null);
+  const [studentName, setStudentName] = React.useState("");
   const [user, setUser] = React.useState<any>(null);
+  const [documents, setDocuments] = React.useState<Record<string, UploadedDocument>>({
+    tenthMarksheet: { type: "10th Marksheet", file: null, uploaded: false },
+    twelfthMarksheet: { type: "12th Marksheet", file: null, uploaded: false },
+    casteCertificate: { type: "Caste Certificate", file: null, uploaded: false },
+    entranceScoreCard: { type: "Entrance Score Card", file: null, uploaded: false },
+    photo: { type: "Student Photo", file: null, uploaded: false },
+    signature: { type: "Student Signature", file: null, uploaded: false },
+  });
 
   const isPG = courseId?.startsWith("mtech") || courseId?.startsWith("phd");
   const courseCategory = isPG ? "PG" : "UG";
 
+  if (isPG) {
+    documents.graduationMarksheet = { type: "Graduation Marksheet", file: null, uploaded: false };
+  }
+
   const [formData, setFormData] = React.useState<FormData>({
-    firstName: "",
-    middleName: "",
-    lastName: "",
+    firstName: studentName.split(' ')[0] || '',
+    middleName: '',
+    lastName: studentName.split(' ').slice(1).join(' ') || '',
     sex: "",
     age: "",
     contactNumber: "",
@@ -101,42 +113,56 @@ const ApplicationForm = () => {
     department: courseCategory
   });
 
-  const [documents, setDocuments] = React.useState<
-    Record<string, UploadedDocument>
-  >({
-    tenthMarksheet: { type: "10th Marksheet", file: null, uploaded: false },
-    twelfthMarksheet: { type: "12th Marksheet", file: null, uploaded: false },
-    ...(isPG ? { 
-      graduationMarksheet: { type: "Graduation Marksheet", file: null, uploaded: false } 
-    } : {}),
-    casteCertificate: { type: "Caste Certificate", file: null, uploaded: false },
-    entranceScoreCard: { type: "Entrance Score Card", file: null, uploaded: false },
-    photo: { type: "Student Photo", file: null, uploaded: false },
-    signature: { type: "Student Signature", file: null, uploaded: false },
-  });
-
   React.useEffect(() => {
     const fetchUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        setUser(user);
+        
+        if (user) {
+          const { data: profile } = await supabase
+            .from('students')
+            .select('name')
+            .eq('id', user.id)
+            .single();
+          
+          if (profile?.name) {
+            setStudentName(profile.name);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching user:", err);
+      }
     };
+    
     fetchUser();
   }, []);
+
+  React.useEffect(() => {
+    if (studentName) {
+      const names = studentName.split(' ');
+      setFormData(prev => ({
+        ...prev,
+        firstName: names[0] || '',
+        lastName: names.length > 1 ? names[names.length - 1] : ''
+      }));
+    }
+  }, [studentName]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleFileChange = (name: string, file: File | null) => {
     if (file) {
-      setDocuments((prev) => ({
+      setDocuments(prev => ({
         ...prev,
         [name]: { ...prev[name], file, uploaded: false },
       }));
@@ -162,7 +188,6 @@ const ApplicationForm = () => {
       setLoading(true);
       setError(null);
 
-      // Validate required fields
       const requiredFields = [
         'firstName', 'lastName', 'sex', 'age', 'contactNumber',
         'fatherName', 'motherName', 'tenthSchool', 'tenthPercentage',
@@ -174,7 +199,6 @@ const ApplicationForm = () => {
         throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
       }
 
-      // Upload documents
       const uploadedDocs = await Promise.all(
         Object.entries(documents)
           .filter(([_, doc]) => doc.file)
@@ -185,7 +209,6 @@ const ApplicationForm = () => {
           })
       );
 
-      // Prepare application data
       const applicationData = {
         student_id: user.id,
         course_id: courseId,
@@ -230,18 +253,14 @@ const ApplicationForm = () => {
         department: formData.department,
       };
 
-      // Submit to applications table
-      const { data, error: upsertError } = await supabase
+      const { error: upsertError } = await supabase
         .from("applications")
         .upsert(applicationData, {
           onConflict: "student_id,course_id",
-        })
-        .select()
-        .single();
+        });
 
       if (upsertError) throw upsertError;
 
-      // Update students table
       const { error: studentError } = await supabase
         .from("students")
         .update({
@@ -257,7 +276,7 @@ const ApplicationForm = () => {
       setSuccess(true);
       toast.success("Application submitted successfully!");
       setTimeout(() => navigate("/student/dashboard"), 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Submission error:", err);
       setError(err.message || "Failed to submit application. Please try again.");
       toast.error(err.message || "Submission failed");
@@ -265,8 +284,6 @@ const ApplicationForm = () => {
       setLoading(false);
     }
   };
-
-  
 
   const nextTab = () => {
     if (activeTab === "personal") setActiveTab("academic");
@@ -291,8 +308,7 @@ const ApplicationForm = () => {
           </CardHeader>
           <CardContent>
             <p className="text-center mb-4">
-              Your application has been submitted successfully and is under
-              review.
+              Your application has been submitted successfully and is under review.
             </p>
           </CardContent>
           <CardFooter className="flex justify-center">
@@ -313,8 +329,7 @@ const ApplicationForm = () => {
             Application Form: {courseId?.toUpperCase()}
           </h1>
           <p className="text-gray-600">
-            Please fill in all the required information to complete your
-            application.
+            Please fill in all the required information to complete your application.
           </p>
         </div>
 
@@ -374,9 +389,7 @@ const ApplicationForm = () => {
                     <Label htmlFor="sex">Sex *</Label>
                     <Select
                       value={formData.sex}
-                      onValueChange={(value) =>
-                        handleSelectChange("sex", value)
-                      }
+                      onValueChange={(value) => handleSelectChange("sex", value)}
                     >
                       <SelectTrigger className="mt-1">
                         <SelectValue placeholder="Select" />
@@ -403,9 +416,7 @@ const ApplicationForm = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="contactNumber">
-                      Contact Number (Student) *
-                    </Label>
+                    <Label htmlFor="contactNumber">Contact Number (Student) *</Label>
                     <Input
                       id="contactNumber"
                       name="contactNumber"
@@ -415,9 +426,7 @@ const ApplicationForm = () => {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="parentContactNumber">
-                      Contact Number (Parents)
-                    </Label>
+                    <Label htmlFor="parentContactNumber">Contact Number (Parents)</Label>
                     <Input
                       id="parentContactNumber"
                       name="parentContactNumber"
@@ -453,9 +462,7 @@ const ApplicationForm = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="fatherOccupation">
-                      Father's Occupation
-                    </Label>
+                    <Label htmlFor="fatherOccupation">Father's Occupation</Label>
                     <Input
                       id="fatherOccupation"
                       name="fatherOccupation"
@@ -465,9 +472,7 @@ const ApplicationForm = () => {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="motherOccupation">
-                      Mother's Occupation
-                    </Label>
+                    <Label htmlFor="motherOccupation">Mother's Occupation</Label>
                     <Input
                       id="motherOccupation"
                       name="motherOccupation"

@@ -10,11 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useRouter } from "next/router"; // For Next.js
-// OR
-// import { useNavigate } from "react-router-dom"; // For React Router
-
-import { supabase } from '@/lib/supabase'; // <-- THIS IS THE CRITICAL IMPORT
+import { useRouter } from "next/router";
+import { supabase } from '@/lib/supabase';
 
 type RegistrationStep = "EMAIL" | "OTP" | "CREATE_PASSWORD";
 
@@ -22,12 +19,14 @@ interface NewStudentRegistrationProps {
   isOpen?: boolean;
   onClose?: () => void;
   onRegister?: (data: { email: string; password: string }) => void;
+  studentName?: string; // New prop for the student's name
 }
 
 const NewStudentRegistration = ({
   isOpen = true,
   onClose = () => {},
   onRegister = () => {},
+  studentName = "", // Default empty string
 }: NewStudentRegistrationProps) => {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -35,15 +34,15 @@ const NewStudentRegistration = ({
   const [error, setError] = React.useState("");
   const [step, setStep] = React.useState<RegistrationStep>("EMAIL");
   const [generatedOTP, setGeneratedOTP] = React.useState("");
-  const router = useRouter(); // Next.js
-  // const navigate = useNavigate(); // React Router
+  const [name, setName] = React.useState(studentName); // Initialize with studentName
+  const router = useRouter();
 
   const generateOTP = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
 
   const handleEmailSubmit = async () => {
-    if (!email) {  // Only checks if empty
+    if (!email) {
       setError("Please enter your email");
       return;
     }
@@ -78,20 +77,17 @@ const NewStudentRegistration = ({
 
       if (authError) throw authError;
 
-      // 2. Save basic student data
+      // 2. Save student data with name (use the name state which could be from props or modified)
       const { error: dbError } = await supabase.from("student").insert({
         email,
-        name: email.split("@")[0], // Default name
+        name: name || email.split("@")[0], // Use provided name or fallback to email prefix
         status: "pending",
       });
 
       if (dbError) throw dbError;
 
       // 3. Redirect to profile completion
-      router.push("/student/profile-complete"); // Next.js
-      // navigate("/student/profile-complete"); // React Router
-
-      // Optional: Call parent callback
+      router.push("/student/profile-complete");
       onRegister({ email, password });
     } catch (err) {
       setError(err.message);
@@ -113,6 +109,18 @@ const NewStudentRegistration = ({
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
+            {name && ( // Only show name field if we don't have a name from login
+              <div className="space-y-2">
+                <Label htmlFor="name">Name</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Enter your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+            )}
             <Button
               onClick={handleEmailSubmit}
               className="w-full bg-[#0A2240] hover:bg-[#0A2240]/90"

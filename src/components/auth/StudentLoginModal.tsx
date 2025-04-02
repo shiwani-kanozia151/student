@@ -12,10 +12,20 @@ import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { signIn, getCurrentUser } from "@/lib/auth";
 
+// Add this interface to type the user object
+interface AuthUser {
+  id: string;
+  email?: string;
+  user_metadata?: {
+    name?: string;
+    full_name?: string;
+  };
+}
+
 interface StudentLoginModalProps {
   isOpen?: boolean;
   onClose?: () => void;
-  onLogin?: (data: { email: string }) => void;
+  onLogin?: (data: { email: string; name?: string }) => void;
 }
 
 const StudentLoginModal = ({
@@ -41,10 +51,17 @@ const StudentLoginModal = ({
 
       if (response.success) {
         // Get user data to ensure we have a valid session
-        const user = await getCurrentUser();
+        const user = await getCurrentUser() as AuthUser; // Type assertion
         if (user) {
           console.log("Login successful, user:", user);
-          onLogin({ email });
+          // Safely get the name from user metadata
+          const userName = user.user_metadata?.name || 
+                          user.user_metadata?.full_name || 
+                          "";
+          onLogin({ 
+            email: user.email || email,
+            name: userName
+          });
           onClose();
         } else {
           throw new Error("Failed to get user data after login");

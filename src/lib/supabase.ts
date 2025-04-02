@@ -1,27 +1,46 @@
 import { createClient } from "@supabase/supabase-js";
 import { Database } from "@/types/supabase";
 
-// Validate environment variables (Vite uses import.meta.env)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://frfetntxsjfpkkvqxoqf.supabase.co";
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyZmV0bnR4c2pmcGtrdnF4b3FmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA1OTI0NTksImV4cCI6MjA1NjE2ODQ1OX0.n33QXjBLcS_leG_0f0Yt57QbHWYjRjheU9xPjXMVSew";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl) {
-  throw new Error("VITE_SUPABASE_URL is not defined");
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("Supabase credentials are not defined in environment variables");
 }
 
-if (!supabaseAnonKey) {
-  throw new Error("VITE_SUPABASE_ANON_KEY is not defined");
-}
-
-// Create and export the typed Supabase client
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
   },
+  realtime: {
+    params: {
+      eventsPerSecond: 10, // Adjust based on your needs
+    },
+  },
 });
 
-// Helper types (unchanged)
+// Helper function for real-time subscriptions
+export const subscribeToChanges = (table: string, callback: () => void) => {
+  const channel = supabase
+    .channel(`${table}_changes`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: table,
+      },
+      () => callback()
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
+
+// Your existing type exports
 export type Tables = Database["public"]["Tables"];
 export type ApplicationsTable = Tables["applications"]["Row"];
 export type InsertApplication = Tables["applications"]["Insert"];
