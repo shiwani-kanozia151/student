@@ -18,6 +18,7 @@ interface Course {
   type: string;
   description: string;
   duration?: string;
+  is_active?: boolean;
 }
 
 interface MappedCourse extends Course {
@@ -25,11 +26,11 @@ interface MappedCourse extends Course {
   originalType: string;
 }
 
-// Define consistent course type categories
+// Expanded course type categories with variations
 const COURSE_CATEGORIES = {
-  UG: ["ug_btech", "ug_bsc_bed"],
-  PG: ["pg_mtech", "pg_mca", "pg_ma", "pg_msc", "pg_mba"],
-  RESEARCH: ["phd", "ms_research"]
+  UG: ["ug_btech", "ug_bsc_bed", "btech", "b.tech", "undergrad_btech"],
+  PG: ["pg_mtech", "pg_mca", "pg_ma", "pg_msc", "pg_mba", "mtech", "mca", "ma", "msc", "mba"],
+  RESEARCH: ["phd", "ms_research", "ph.d", "ms_research"]
 };
 
 const CourseSelection = () => {
@@ -44,7 +45,7 @@ const CourseSelection = () => {
   const fetchCourses = React.useCallback(async () => {
     try {
       setLoading(true);
-      console.log("CourseSelection: Fetching courses...");
+      console.log("[DEBUG] Fetching courses from Supabase...");
       const { data, error } = await supabase
         .from("courses")
         .select("*")
@@ -52,21 +53,22 @@ const CourseSelection = () => {
 
       if (error) throw error;
 
-      console.log("CourseSelection: Courses fetched:", data);
-      if (data) {
-        // Map database courses to UI courses with proper categories
-        const mappedCourses = data.map((course) => {
-          // Map database type to UI category
+      console.log("[DEBUG] Raw course data:", data);
+      
+      const mappedCourses = (data || [])
+        .map((course) => {
+          // Normalize type by removing spaces and making lowercase
+          const normalizedType = course.type.toLowerCase().replace(/\s+/g, '');
           let category: "ug" | "pg" | "research" | null = null;
           
-          if (COURSE_CATEGORIES.UG.includes(course.type)) {
+          if (COURSE_CATEGORIES.UG.some(t => normalizedType.includes(t.toLowerCase()))) {
             category = "ug";
-          } else if (COURSE_CATEGORIES.PG.includes(course.type)) {
+          } else if (COURSE_CATEGORIES.PG.some(t => normalizedType.includes(t.toLowerCase()))) {
             category = "pg";
-          } else if (COURSE_CATEGORIES.RESEARCH.includes(course.type)) {
+          } else if (COURSE_CATEGORIES.RESEARCH.some(t => normalizedType.includes(t.toLowerCase()))) {
             category = "research";
           } else {
-            console.warn(`Unknown course type: ${course.type}`);
+            console.warn(`[DEBUG] Unknown course type: ${course.type}`);
             return null;
           }
 
@@ -75,12 +77,14 @@ const CourseSelection = () => {
             category,
             originalType: course.type,
           };
-        }).filter(Boolean) as MappedCourse[]; // Filter out null values
+        })
+        .filter(Boolean)
+        .filter(course => course.is_active !== false);
 
-        setCourses(mappedCourses);
-      }
+      console.log("[DEBUG] Mapped courses:", mappedCourses);
+      setCourses(mappedCourses as MappedCourse[]);
     } catch (err) {
-      console.error("Error fetching courses:", err);
+      console.error("[ERROR] Fetching courses:", err);
     } finally {
       setLoading(false);
     }
@@ -89,18 +93,16 @@ const CourseSelection = () => {
   React.useEffect(() => {
     fetchCourses();
 
-    // Set up real-time subscription for course updates
     const unsubscribe = subscribeToContentUpdates((payload) => {
-      console.log("CourseSelection: Subscription payload received:", payload);
+      console.log("[DEBUG] Realtime update:", payload);
       if (payload.table === "courses") {
-        console.log("CourseSelection: Course change detected, refreshing...");
+        console.log("[DEBUG] Course change detected, refreshing...");
         fetchCourses();
       }
     });
 
-    // Listen for custom course update events
     const handleCustomUpdate = () => {
-      console.log("CourseSelection: Custom course update event detected");
+      console.log("[DEBUG] Custom update event received");
       fetchCourses();
     };
     window.addEventListener("course-update", handleCustomUpdate);
@@ -110,6 +112,16 @@ const CourseSelection = () => {
       window.removeEventListener("course-update", handleCustomUpdate);
     };
   }, [fetchCourses]);
+
+  // Debug effect to log course data
+  React.useEffect(() => {
+    if (!loading) {
+      console.log("[DEBUG] Current courses state:", courses);
+      console.log("[DEBUG] Unique course types:", 
+        [...new Set(courses.map(c => c.originalType))]
+      );
+    }
+  }, [loading, courses]);
 
   const filteredCourses = selectedCategory
     ? courses.filter((course) => course.category === selectedCategory)
@@ -129,30 +141,20 @@ const CourseSelection = () => {
     setSelectedCategory(null);
   };
 
-  // Get display name for course type
   const getTypeDisplayName = (type: string) => {
-    switch (type) {
-      case "ug_btech":
-        return "B.Tech";
-      case "pg_mtech":
-        return "M.Tech";
-      case "phd":
-        return "Ph.D";
-      case "ug_bsc_bed":
-        return "B.Sc. B.Ed.";
-      case "pg_msc":
-        return "M.Sc.";
-      case "pg_mca":
-        return "MCA";
-      case "pg_mba":
-        return "MBA";
-      case "pg_ma":
-        return "MA";
-      case "ms_research":
-        return "M.S. (by Research)";
-      default:
-        return type.toUpperCase();
-    }
+    const normalizedType = type.toLowerCase().replace(/\s+/g, '');
+    
+    if (normalizedType.includes("btech")) return "B.Tech";
+    if (normalizedType.includes("mtech")) return "M.Tech";
+    if (normalizedType.includes("phd") || normalizedType.includes("ph.d")) return "Ph.D";
+    if (normalizedType.includes("bsc_bed")) return "B.Sc. B.Ed.";
+    if (normalizedType.includes("msc")) return "M.Sc.";
+    if (normalizedType.includes("mca")) return "MCA";
+    if (normalizedType.includes("mba")) return "MBA";
+    if (normalizedType.includes("ma")) return "MA";
+    if (normalizedType.includes("ms_research")) return "M.S. (by Research)";
+    
+    return type.toUpperCase();
   };
 
   if (loading) {
@@ -276,8 +278,22 @@ const CourseSelection = () => {
               {filteredCourses.length === 0 && (
                 <div className="col-span-3 text-center py-12 bg-gray-50 rounded-lg">
                   <p className="text-gray-500">
-                    No courses available in this category
+                    No courses available in this category.{" "}
+                    {courses.length > 0 && (
+                      <span className="text-sm">
+                        (Found {courses.length} courses total)
+                      </span>
+                    )}
                   </p>
+                  <button 
+                    onClick={() => {
+                      console.log("[DEBUG] All courses:", courses);
+                      console.log("[DEBUG] Filtered courses:", filteredCourses);
+                    }}
+                    className="mt-2 text-sm text-blue-600 hover:underline"
+                  >
+                    Click to debug in console
+                  </button>
                 </div>
               )}
             </div>

@@ -2,8 +2,8 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
-// 1. Define types matching your database
-type CourseType = "btech" | "bsc_bed" | "mtech" | "mca" | "ma" | "msc" | "mba" | "phd" | "ms_research";
+// Expanded type definitions to include possible variations
+type CourseType = "btech" | "ug_btech" | "bsc_bed" | "mtech" | "mca" | "ma" | "msc" | "mba" | "phd" | "ms_research" | string;
 
 interface Course {
   id: string;
@@ -13,6 +13,7 @@ interface Course {
   duration: string;
   curriculum?: string[];
   eligibility?: string;
+  is_active?: boolean;
 }
 
 const Courses = () => {
@@ -20,10 +21,11 @@ const Courses = () => {
   const [loading, setLoading] = useState(true);
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
 
-  // 2. Fetch courses with proper error handling
   const fetchCourses = async () => {
     try {
       setLoading(true);
+      console.log("[DEBUG] Fetching courses from Supabase...");
+      
       const { data, error } = await supabase
         .from("courses")
         .select("*")
@@ -31,10 +33,19 @@ const Courses = () => {
 
       if (error) throw error;
       
-      // Debug: Log fetched data
-      console.log("Fetched courses:", data);
+      console.log("[DEBUG] Raw course data:", data);
       
-      setCourses(data || []);
+      // Enhanced filtering with debugging
+      const visibleCourses = (data || []).filter(course => {
+        const isVisible = course.is_active !== false;
+        if (!isVisible) {
+          console.log(`[DEBUG] Filtered out inactive course: ${course.name} (ID: ${course.id})`);
+        }
+        return isVisible;
+      });
+
+      console.log("[DEBUG] Visible courses:", visibleCourses);
+      setCourses(visibleCourses);
     } catch (error) {
       console.error("Failed to fetch courses:", error);
     } finally {
@@ -42,7 +53,6 @@ const Courses = () => {
     }
   };
 
-  // 3. Set up real-time updates
   useEffect(() => {
     fetchCourses();
 
@@ -56,7 +66,7 @@ const Courses = () => {
           table: "courses",
         },
         () => {
-          console.log("Course change detected - refreshing...");
+          console.log("[DEBUG] Course change detected - refreshing...");
           fetchCourses();
         }
       )
@@ -67,12 +77,28 @@ const Courses = () => {
     };
   }, []);
 
-  // 4. Group courses by type
+  // Enhanced course grouping with flexible type matching
   const groupedCourses = {
-    btech: courses.filter(course => course.type === "btech"),
-    mca: courses.filter(course => course.type === "mca"),
+    btech: courses.filter(course => 
+      ["btech", "ug_btech", "b.tech", "undergrad_btech"].includes(
+        course.type.toLowerCase().replace(/\s+/g, '')
+      )
+    ),
+    mca: courses.filter(course => 
+      ["mca"].includes(course.type.toLowerCase())
+    ),
     // Add other types as needed
   };
+
+  // Debug effect to log course grouping
+  useEffect(() => {
+    if (!loading) {
+      console.log("[DEBUG] Grouped BTech courses:", groupedCourses.btech);
+      console.log("[DEBUG] All course types found:", 
+        [...new Set(courses.map(c => c.type))]
+      );
+    }
+  }, [loading, groupedCourses, courses]);
 
   if (loading) {
     return (
@@ -82,7 +108,6 @@ const Courses = () => {
     );
   }
 
-  // 5. Render courses
   return (
     <div className="min-h-screen bg-white">
       <main className="container mx-auto px-4 py-8">
@@ -94,7 +119,7 @@ const Courses = () => {
             Undergraduate Programs
           </h2>
 
-          {groupedCourses.btech.length > 0 && (
+          {groupedCourses.btech.length > 0 ? (
             <>
               <h3 className="text-xl font-semibold text-[#002147] mb-4">
                 B.Tech Programs
@@ -110,6 +135,25 @@ const Courses = () => {
                 ))}
               </div>
             </>
+          ) : (
+            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+              <p className="text-yellow-800">
+                No undergraduate courses found. {courses.length > 0 && (
+                  <span className="font-medium">
+                    (Total courses: {courses.length}, Types: {[...new Set(courses.map(c => c.type))].join(', ')})
+                  </span>
+                )}
+              </p>
+              <button 
+                onClick={() => {
+                  console.log("[DEBUG] Current courses state:", courses);
+                  console.log("[DEBUG] Grouped courses:", groupedCourses);
+                }}
+                className="mt-2 text-sm text-blue-600 hover:underline"
+              >
+                Click to debug in console
+              </button>
+            </div>
           )}
         </div>
 
@@ -119,7 +163,7 @@ const Courses = () => {
             Postgraduate Programs
           </h2>
 
-          {groupedCourses.mca.length > 0 && (
+          {groupedCourses.mca.length > 0 ? (
             <>
               <h3 className="text-xl font-semibold text-[#002147] mb-4">
                 MCA Programs
@@ -135,6 +179,8 @@ const Courses = () => {
                 ))}
               </div>
             </>
+          ) : (
+            <p className="text-gray-500">No postgraduate courses available at the moment.</p>
           )}
         </div>
 
@@ -161,7 +207,6 @@ const Courses = () => {
   );
 };
 
-// 6. Course Card Component
 const CourseCard = ({ course, expanded, onToggle }: { course: Course, expanded: boolean, onToggle: () => void }) => (
   <div className="border rounded-lg overflow-hidden shadow-sm">
     <div 
