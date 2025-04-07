@@ -29,9 +29,10 @@ interface Document {
   id?: string;
   type: string;
   url: string;
-  name?: string;
+  file_name?: string;
   uploaded_at?: string;
   student_id?: string;
+  application_id?: string;
 }
 
 interface StatusHistoryItem {
@@ -49,17 +50,27 @@ interface Student {
   is_verified: boolean;
   status_history?: StatusHistoryItem[];
   phone?: string;
-  registration_number?: string;
   admin_remarks?: string | null;
   name: string;
   email?: string;
   department?: string;
   status: "pending" | "approved" | "rejected";
-  course?: string | null;
+  course_id?: string | null;
+  course_level?: string | null;
   dob?: string | null;
   gender?: string | null;
   nationality?: string | null;
   updated_at?: string;
+  personal_details?: {
+    father_name?: string;
+    mother_name?: string;
+    age?: string;
+    contact_number?: string;
+    [key: string]: any;
+  };
+  academic_details?: {
+    [key: string]: any;
+  };
 }
 
 const getCourseCategoryLabel = (department?: string) => {
@@ -74,27 +85,24 @@ const getCourseCategoryLabel = (department?: string) => {
 const validateStudent = (student: any): Student | null => {
   if (!student || typeof student !== 'object') return null;
 
-  // Ensure required fields exist
   if (!student.id || typeof student.id !== 'string') return null;
   if (!student.created_at || typeof student.created_at !== 'string') return null;
   if (!student.name || typeof student.name !== 'string') return null;
   if (!student.status || !['pending', 'approved', 'rejected'].includes(student.status)) return null;
 
-  // Validate documents
   const documents = Array.isArray(student.documents)
     ? student.documents.filter((doc: any) => 
-        doc && 
-        typeof doc === 'object' && 
-        typeof doc.type === 'string' && 
-        typeof doc.url === 'string'
+        doc && typeof doc === 'object' && typeof doc.url === 'string'
       )
-    : [];
+    : Array.isArray(student.student_documents)
+      ? student.student_documents.filter((doc: any) => 
+          doc && typeof doc === 'object' && typeof doc.url === 'string'
+        )
+      : [];
 
-  // Validate status history
   const status_history = Array.isArray(student.status_history)
     ? student.status_history.filter((item: any) =>
-        item &&
-        typeof item === 'object' &&
+        item && typeof item === 'object' &&
         typeof item.status === 'string' &&
         typeof item.changed_at === 'string'
       )
@@ -108,14 +116,16 @@ const validateStudent = (student: any): Student | null => {
     phone: typeof student.phone === 'string' ? student.phone : undefined,
     address: typeof student.address === 'string' ? student.address : undefined,
     department: typeof student.department === 'string' ? student.department : undefined,
-    course: typeof student.course === 'string' ? student.course : null,
+    course_id: student.course_id || student.applications?.[0]?.course_id || null,
+    course_level: student.course_level || student.applications?.[0]?.course_level || null,
     dob: typeof student.dob === 'string' ? student.dob : null,
     gender: typeof student.gender === 'string' ? student.gender : null,
     nationality: typeof student.nationality === 'string' ? student.nationality : null,
-    registration_number: typeof student.registration_number === 'string' ? student.registration_number : undefined,
     admin_remarks: typeof student.admin_remarks === 'string' ? student.admin_remarks : null,
     is_verified: typeof student.is_verified === 'boolean' ? student.is_verified : false,
-    updated_at: typeof student.updated_at === 'string' ? student.updated_at : undefined
+    updated_at: typeof student.updated_at === 'string' ? student.updated_at : undefined,
+    personal_details: student.personal_details || {},
+    academic_details: student.academic_details || {}
   };
 };
 
@@ -163,7 +173,25 @@ const VerificationAdmin = () => {
         .from("students")
         .select(`
           *,
-          student_documents(*)
+          student_documents!student_id(
+            id,
+            type,
+            url,
+            file_name,
+            uploaded_at,
+            application_id
+          ),
+          applications!student_id(
+            id,
+            personal_details,
+            academic_details,
+            course_id,
+            department,
+            course_level,
+            status,
+            admin_remarks,
+            created_at
+          )
         `)
         .order("created_at", { ascending: false });
 
@@ -172,7 +200,13 @@ const VerificationAdmin = () => {
       const validatedStudents = (studentsData || [])
         .map(student => validateStudent({
           ...student,
-          documents: student.student_documents || []
+          ...(student.applications?.[0]?.personal_details || {}),
+          ...(student.applications?.[0]?.academic_details || {}),
+          documents: student.student_documents || [],
+          course_id: student.applications?.[0]?.course_id || null,
+          department: student.applications?.[0]?.department || null,
+          course_level: student.applications?.[0]?.course_level || null,
+          admin_remarks: student.applications?.[0]?.admin_remarks || null
         }))
         .filter(Boolean) as Student[];
 
@@ -253,7 +287,24 @@ const VerificationAdmin = () => {
         .from("students")
         .select(`
           *,
-          student_documents(*)
+          student_documents!student_id(
+            id,
+            type,
+            url,
+            file_name,
+            uploaded_at,
+            application_id
+          ),
+          applications!student_id(
+            id,
+            personal_details,
+            academic_details,
+            course_id,
+            department,
+            course_level,
+            status,
+            admin_remarks
+          )
         `)
         .eq("id", studentId)
         .single();
@@ -266,7 +317,13 @@ const VerificationAdmin = () => {
 
       const validatedStudent = validateStudent({
         ...studentData,
-        documents: studentData.student_documents || []
+        ...(studentData.applications?.[0]?.personal_details || {}),
+        ...(studentData.applications?.[0]?.academic_details || {}),
+        documents: studentData.student_documents || [],
+        course_id: studentData.applications?.[0]?.course_id || null,
+        department: studentData.applications?.[0]?.department || null,
+        course_level: studentData.applications?.[0]?.course_level || null,
+        admin_remarks: studentData.applications?.[0]?.admin_remarks || null
       });
 
       if (!validatedStudent) {
@@ -291,7 +348,7 @@ const VerificationAdmin = () => {
       (student.name?.toLowerCase().includes(search) || false) ||
       (student.email?.toLowerCase().includes(search) || false) ||
       (student.department?.toLowerCase().includes(search) || false) ||
-      (student.course?.toLowerCase().includes(search) || false)
+      (student.course_id?.toLowerCase().includes(search) || false)
     );
   });
 
@@ -432,10 +489,6 @@ const VerificationAdmin = () => {
                           { label: "Full Name", value: selectedStudent.name || "N/A" },
                           { label: "Email", value: selectedStudent.email || "N/A" },
                           { label: "Phone", value: selectedStudent.phone || "N/A" },
-                          { 
-                            label: "Registration Number", 
-                            value: selectedStudent.registration_number || "N/A" 
-                          },
                           { label: "Date of Birth", value: selectedStudent.dob || "N/A" },
                           { label: "Gender", value: selectedStudent.gender || "N/A" },
                           { label: "Nationality", value: selectedStudent.nationality || "N/A" },
@@ -461,7 +514,8 @@ const VerificationAdmin = () => {
                             label: "Course Type", 
                             value: getCourseCategoryLabel(selectedStudent.department) 
                           },
-                          { label: "Course Name", value: selectedStudent.course || "N/A" },
+                          { label: "Course Name", value: selectedStudent.course_id || "N/A" },
+                          { label: "Course Level", value: selectedStudent.course_level || "N/A" },
                           { 
                             label: "Registration Date", 
                             value: selectedStudent.created_at 
@@ -528,9 +582,9 @@ const VerificationAdmin = () => {
                               className={`px-2 py-1 rounded-full text-xs font-semibold ${
                                 selectedStudent.status === "approved"
                                   ? "bg-green-100 text-green-800"
-                                  : selectedStudent.status === "rejected"
+                                : selectedStudent.status === "rejected"
                                   ? "bg-red-100 text-red-800"
-                                  : "bg-yellow-100 text-yellow-800"
+                                : "bg-yellow-100 text-yellow-800"
                               }`}
                             >
                               {selectedStudent.status?.charAt(0)?.toUpperCase() +
@@ -636,7 +690,7 @@ const VerificationAdmin = () => {
                                 </div>
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm text-gray-500 truncate">
-                                    {typeof doc.name === 'string' ? doc.name : "Document"}
+                                    {typeof doc.file_name === 'string' ? doc.file_name : "Document"}
                                   </span>
                                   <Button
                                     variant="outline"

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
-// Expanded type definitions to include possible variations
 type CourseType = "btech" | "ug_btech" | "bsc_bed" | "mtech" | "mca" | "ma" | "msc" | "mba" | "phd" | "ms_research" | string;
 
 interface Course {
@@ -35,7 +34,6 @@ const Courses = () => {
       
       console.log("[DEBUG] Raw course data:", data);
       
-      // Enhanced filtering with debugging
       const visibleCourses = (data || []).filter(course => {
         const isVisible = course.is_active !== false;
         if (!isVisible) {
@@ -77,23 +75,37 @@ const Courses = () => {
     };
   }, []);
 
-  // Enhanced course grouping with flexible type matching
+  // Enhanced course grouping with all program types
   const groupedCourses = {
     btech: courses.filter(course => 
       ["btech", "ug_btech", "b.tech", "undergrad_btech"].includes(
         course.type.toLowerCase().replace(/\s+/g, '')
       )
     ),
+    mtech: courses.filter(course => 
+      ["mtech", "m.tech"].includes(course.type.toLowerCase())
+    ),
     mca: courses.filter(course => 
       ["mca"].includes(course.type.toLowerCase())
     ),
-    // Add other types as needed
+    phd: courses.filter(course => 
+      ["phd", "ph.d", "doctorate"].includes(course.type.toLowerCase())
+    ),
+    other: courses.filter(course => {
+      const normalizedType = course.type.toLowerCase().replace(/\s+/g, '');
+      return !["btech", "ug_btech", "b.tech", "undergrad_btech", "mtech", "m.tech", "mca", "phd", "ph.d", "doctorate"].includes(normalizedType);
+    })
   };
 
-  // Debug effect to log course grouping
   useEffect(() => {
     if (!loading) {
-      console.log("[DEBUG] Grouped BTech courses:", groupedCourses.btech);
+      console.log("[DEBUG] Grouped courses:", {
+        btech: groupedCourses.btech,
+        mtech: groupedCourses.mtech,
+        mca: groupedCourses.mca,
+        phd: groupedCourses.phd,
+        other: groupedCourses.other
+      });
       console.log("[DEBUG] All course types found:", 
         [...new Set(courses.map(c => c.type))]
       );
@@ -114,75 +126,112 @@ const Courses = () => {
         <h1 className="text-3xl font-bold text-[#002147] mb-8">Courses</h1>
 
         {/* Undergraduate Programs */}
-        <div className="mb-12">
-          <h2 className="text-2xl font-bold text-[#002147] mb-6">
-            Undergraduate Programs
-          </h2>
-
-          {groupedCourses.btech.length > 0 ? (
-            <>
-              <h3 className="text-xl font-semibold text-[#002147] mb-4">
-                B.Tech Programs
-              </h3>
-              <div className="space-y-4">
-                {groupedCourses.btech.map((course) => (
-                  <CourseCard 
-                    key={course.id}
-                    course={course}
-                    expanded={expandedCourse === course.id}
-                    onToggle={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)}
-                  />
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-              <p className="text-yellow-800">
-                No undergraduate courses found. {courses.length > 0 && (
-                  <span className="font-medium">
-                    (Total courses: {courses.length}, Types: {[...new Set(courses.map(c => c.type))].join(', ')})
-                  </span>
-                )}
-              </p>
-              <button 
-                onClick={() => {
-                  console.log("[DEBUG] Current courses state:", courses);
-                  console.log("[DEBUG] Grouped courses:", groupedCourses);
-                }}
-                className="mt-2 text-sm text-blue-600 hover:underline"
-              >
-                Click to debug in console
-              </button>
+        {groupedCourses.btech.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-2xl font-bold text-[#002147] mb-6">
+              Undergraduate Programs
+            </h2>
+            <h3 className="text-xl font-semibold text-[#002147] mb-4">
+              B.Tech Programs
+            </h3>
+            <div className="space-y-4">
+              {groupedCourses.btech.map((course) => (
+                <CourseCard 
+                  key={course.id}
+                  course={course}
+                  expanded={expandedCourse === course.id}
+                  onToggle={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)}
+                />
+              ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Postgraduate Programs */}
-        <div className="mb-12">
-          <h2 className="text-2xl font-bold text-[#002147] mb-6">
-            Postgraduate Programs
-          </h2>
+        {(groupedCourses.mtech.length > 0 || groupedCourses.mca.length > 0) && (
+          <div className="mb-12">
+            <h2 className="text-2xl font-bold text-[#002147] mb-6">
+              Postgraduate Programs
+            </h2>
+            
+            {groupedCourses.mtech.length > 0 && (
+              <>
+                <h3 className="text-xl font-semibold text-[#002147] mb-4">
+                  M.Tech Programs
+                </h3>
+                <div className="space-y-4">
+                  {groupedCourses.mtech.map((course) => (
+                    <CourseCard 
+                      key={course.id}
+                      course={course}
+                      expanded={expandedCourse === course.id}
+                      onToggle={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
 
-          {groupedCourses.mca.length > 0 ? (
-            <>
-              <h3 className="text-xl font-semibold text-[#002147] mb-4">
-                MCA Programs
-              </h3>
-              <div className="space-y-4">
-                {groupedCourses.mca.map((course) => (
-                  <CourseCard 
-                    key={course.id}
-                    course={course}
-                    expanded={expandedCourse === course.id}
-                    onToggle={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)}
-                  />
-                ))}
-              </div>
-            </>
-          ) : (
-            <p className="text-gray-500">No postgraduate courses available at the moment.</p>
-          )}
-        </div>
+            {groupedCourses.mca.length > 0 && (
+              <>
+                <h3 className="text-xl font-semibold text-[#002147] mb-4 mt-6">
+                  MCA Programs
+                </h3>
+                <div className="space-y-4">
+                  {groupedCourses.mca.map((course) => (
+                    <CourseCard 
+                      key={course.id}
+                      course={course}
+                      expanded={expandedCourse === course.id}
+                      onToggle={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Research Programs */}
+        {groupedCourses.phd.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-2xl font-bold text-[#002147] mb-6">
+              Research Programs
+            </h2>
+            <h3 className="text-xl font-semibold text-[#002147] mb-4">
+              Ph.D Programs
+            </h3>
+            <div className="space-y-4">
+              {groupedCourses.phd.map((course) => (
+                <CourseCard 
+                  key={course.id}
+                  course={course}
+                  expanded={expandedCourse === course.id}
+                  onToggle={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Other Programs */}
+        {groupedCourses.other.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-2xl font-bold text-[#002147] mb-6">
+              Other Programs
+            </h2>
+            <div className="space-y-4">
+              {groupedCourses.other.map((course) => (
+                <CourseCard 
+                  key={course.id}
+                  course={course}
+                  expanded={expandedCourse === course.id}
+                  onToggle={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Contact Information */}
         <div className="mt-8 bg-gray-50 p-6 rounded-lg">

@@ -11,6 +11,7 @@ interface Student {
   name: string;
   email: string;
   department?: string;
+  gender?: string;
   status: string;
   created_at: string;
   admin_remarks?: string;
@@ -59,7 +60,8 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
         personal_details: applicationData?.personal_details,
         academic_details: applicationData?.academic_details,
         application_status: applicationData?.status || 'pending',
-        application_remarks: applicationData?.admin_remarks
+        application_remarks: applicationData?.admin_remarks,
+        gender: studentData?.gender || applicationData?.personal_details?.sex 
       });
 
     } catch (err) {
@@ -219,8 +221,9 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Gender/Age</h3>
                 <p className="text-lg">
-                  {getNestedValue(student, 'personal_details.sex')} / {getNestedValue(student, 'personal_details.age')}
-                </p>
+                  {student.gender || getNestedValue(student, 'personal_details.sex')} / 
+                   {getNestedValue(student, 'personal_details.age')}
+                  </p>
               </div>
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Contact Number</h3>

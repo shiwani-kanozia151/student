@@ -187,91 +187,116 @@ const ApplicationForm = () => {
     try {
       setLoading(true);
       setError(null);
-
+  
       const requiredFields = [
         'firstName', 'lastName', 'sex', 'age', 'contactNumber',
         'fatherName', 'motherName', 'tenthSchool', 'tenthPercentage',
         'twelfthSchool', 'twelfthPercentage'
       ];
-
+  
       const missingFields = requiredFields.filter(field => !formData[field]);
       if (missingFields.length > 0) {
         throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
       }
+  
+      // First create application to get ID
+      const fullName = `${formData.firstName} ${formData.middleName} ${formData.lastName}`.replace(/\s+/g, ' ').trim();
+      
+      const { data: application, error: appError } = await supabase
+        .from("applications")
+        .insert({
+          student_id: user.id,
+          course_id: courseId,
+          department: formData.department,
+          personal_details: {
+            name: fullName,
+            sex: formData.sex,
+            age: formData.age,
+            contact_number: formData.contactNumber,
+            parent_contact: formData.parentContactNumber,
+            father_name: formData.fatherName,
+            mother_name: formData.motherName,
+            father_occupation: formData.fatherOccupation,
+            mother_occupation: formData.motherOccupation,
+          },
+          academic_details: {
+            tenth: {
+              school: formData.tenthSchool,
+              percentage: formData.tenthPercentage,
+              board: formData.tenthBoard,
+            },
+            twelfth: {
+              school: formData.twelfthSchool,
+              percentage: formData.twelfthPercentage,
+              board: formData.twelfthBoard,
+            },
+            entrance: {
+              exam: formData.entranceExam,
+              score: formData.entranceScore,
+              rank: formData.entranceRank,
+            },
+            ...(isPG && {
+              graduation: {
+                school: formData.graduationSchool,
+                percentage: formData.graduationPercentage,
+                degree: formData.graduationDegree,
+              },
+            }),
+          },
+          status: "pending",
+          remarks: formData.remarks
+        })
+        .select()
+        .single();
 
-      const uploadedDocs = await Promise.all(
+      if (appError) throw appError;
+
+      // Upload documents with application reference
+      await Promise.all(
         Object.entries(documents)
           .filter(([_, doc]) => doc.file)
           .map(async ([key, doc]) => {
-            const path = `${user.id}/${courseId}/${key}/${doc.file!.name}`;
+            const path = `documents/${user.id}/${courseId}/${key}/${doc.file!.name}`;
             const url = await uploadFile(doc.file!, path);
-            return { type: doc.type, url };
+            
+            const { error: docError } = await supabase
+              .from('student_documents')
+              .upsert({
+                student_id: user.id,
+                application_id: application.id,
+                type: doc.type,
+                url,
+                name: doc.file!.name,
+                uploaded_at: new Date().toISOString()
+              });
+
+            if (docError) throw docError;
           })
       );
 
-      const applicationData = {
-        student_id: user.id,
-        course_id: courseId,
-        personal_details: {
-          name: `${formData.firstName} ${formData.middleName} ${formData.lastName}`.replace(/\s+/g, ' ').trim(),
-          sex: formData.sex,
-          age: formData.age,
-          contact_number: formData.contactNumber,
-          parent_contact: formData.parentContactNumber,
-          father_name: formData.fatherName,
-          mother_name: formData.motherName,
-          father_occupation: formData.fatherOccupation,
-          mother_occupation: formData.motherOccupation,
-        },
-        academic_details: {
-          tenth: {
-            school: formData.tenthSchool,
-            percentage: formData.tenthPercentage,
-            board: formData.tenthBoard,
-          },
-          twelfth: {
-            school: formData.twelfthSchool,
-            percentage: formData.twelfthPercentage,
-            board: formData.twelfthBoard,
-          },
-          entrance: {
-            exam: formData.entranceExam,
-            score: formData.entranceScore,
-            rank: formData.entranceRank,
-          },
-          ...(isPG && {
-            graduation: {
-              school: formData.graduationSchool,
-              percentage: formData.graduationPercentage,
-              degree: formData.graduationDegree,
-            },
-          }),
-        },
-        documents: uploadedDocs,
-        status: "pending",
-        remarks: formData.remarks,
-        department: formData.department,
-      };
-
-      const { error: upsertError } = await supabase
-        .from("applications")
-        .upsert(applicationData, {
-          onConflict: "student_id,course_id",
-        });
-
-      if (upsertError) throw upsertError;
-
+      // Update student record
       const { error: studentError } = await supabase
         .from("students")
-        .update({
-          name: `${formData.firstName} ${formData.lastName}`,
+        .upsert({
+          id: user.id,
+          name: fullName,
+          email: user.email,
           phone: formData.contactNumber,
           department: formData.department,
           status: "pending",
-        })
-        .eq("id", user.id);
+          gender: formData.sex,
+          updated_at: new Date().toISOString()
+        });
 
       if (studentError) throw studentError;
+
+      // Update status history
+      await supabase.rpc('append_status_history', {
+        student_id: user.id,
+        new_status: 'pending',
+        changed_by: 'student',
+        remarks: 'Application submitted'
+      });
 
       setSuccess(true);
       toast.success("Application submitted successfully!");
@@ -284,7 +309,6 @@ const ApplicationForm = () => {
       setLoading(false);
     }
   };
-
   const nextTab = () => {
     if (activeTab === "personal") setActiveTab("academic");
     else if (activeTab === "academic") setActiveTab("documents");

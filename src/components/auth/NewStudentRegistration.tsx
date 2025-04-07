@@ -19,14 +19,14 @@ interface NewStudentRegistrationProps {
   isOpen?: boolean;
   onClose?: () => void;
   onRegister?: (data: { email: string; password: string }) => void;
-  studentName?: string; // New prop for the student's name
+  studentName?: string;
 }
 
 const NewStudentRegistration = ({
   isOpen = true,
   onClose = () => {},
   onRegister = () => {},
-  studentName = "", // Default empty string
+  studentName = "",
 }: NewStudentRegistrationProps) => {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -34,7 +34,7 @@ const NewStudentRegistration = ({
   const [error, setError] = React.useState("");
   const [step, setStep] = React.useState<RegistrationStep>("EMAIL");
   const [generatedOTP, setGeneratedOTP] = React.useState("");
-  const [name, setName] = React.useState(studentName); // Initialize with studentName
+  const [name, setName] = React.useState(studentName);
   const router = useRouter();
 
   const generateOTP = () => {
@@ -62,6 +62,21 @@ const NewStudentRegistration = ({
     }
   };
 
+  const createStudentApplication = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('applications')
+      .insert({
+        student_id: userId,
+        status: 'pending',
+        status_history: [{ status: 'pending', timestamp: new Date().toISOString() }]
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data.id;
+  };
+
   const handleCompleteRegistration = async () => {
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
@@ -76,21 +91,30 @@ const NewStudentRegistration = ({
       });
 
       if (authError) throw authError;
+      if (!authData.user) throw new Error("User creation failed");
 
-      // 2. Save student data with name (use the name state which could be from props or modified)
+      // 2. Save student data
       const { error: dbError } = await supabase.from("student").insert({
+        id: authData.user.id,
         email,
-        name: name || email.split("@")[0], // Use provided name or fallback to email prefix
+        name: name || email.split("@")[0],
         status: "pending",
       });
 
       if (dbError) throw dbError;
 
-      // 3. Redirect to profile completion
+      // 3. Create initial application record
+      const applicationId = await createStudentApplication(authData.user.id);
+      
+      // 4. Store application ID in session for document uploads
+      sessionStorage.setItem('current_application_id', applicationId);
+
+      // 5. Redirect to profile completion (which will handle document uploads)
       router.push("/student/profile-complete");
       onRegister({ email, password });
     } catch (err) {
       setError(err.message);
+      console.error("Registration error:", err);
     }
   };
 
@@ -109,7 +133,7 @@ const NewStudentRegistration = ({
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
-            {name && ( // Only show name field if we don't have a name from login
+            {name && (
               <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
                 <Input
