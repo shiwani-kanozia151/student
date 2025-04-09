@@ -11,15 +11,18 @@ interface Student {
   name: string;
   email: string;
   department?: string;
-  gender?: string;
   status: string;
   created_at: string;
   admin_remarks?: string;
   phone?: string;
+  gender?: string;
+  address?: string;
   personal_details?: any;
   academic_details?: any;
   application_status?: string;
   application_remarks?: string;
+  course_type?: string;
+  course_name?: string;
 }
 
 const StudentDashboard = ({ studentId }: { studentId?: string }) => {
@@ -27,6 +30,15 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const printRef = React.useRef<HTMLDivElement>(null);
+
+  const getCourseCategoryLabel = (courseType?: string) => {
+    switch(courseType) {
+      case "UG": return "Undergraduate";
+      case "PG": return "Postgraduate";
+      case "Research": return "Research";
+      default: return courseType || "N/A";
+    }
+  };
 
   const fetchStudentData = async () => {
     try {
@@ -49,7 +61,7 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
 
       const { data: applicationData, error: appError } = await supabase
         .from('applications')
-        .select('personal_details, academic_details, status, admin_remarks, created_at')
+        .select('personal_details, academic_details, status, admin_remarks, created_at, course_type, course_name')
         .eq('student_id', studentId)
         .single();
 
@@ -61,7 +73,8 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
         academic_details: applicationData?.academic_details,
         application_status: applicationData?.status || 'pending',
         application_remarks: applicationData?.admin_remarks,
-        gender: studentData?.gender || applicationData?.personal_details?.sex 
+        course_type: applicationData?.course_type,
+        course_name: applicationData?.course_name
       });
 
     } catch (err) {
@@ -221,9 +234,8 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Gender/Age</h3>
                 <p className="text-lg">
-                  {student.gender || getNestedValue(student, 'personal_details.sex')} / 
-                   {getNestedValue(student, 'personal_details.age')}
-                  </p>
+                  {getNestedValue(student, 'personal_details.sex')} / {getNestedValue(student, 'personal_details.age')}
+                </p>
               </div>
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Contact Number</h3>
@@ -243,6 +255,12 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
                   {getNestedValue(student, 'personal_details.mother_name')}
                 </p>
               </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-500">Address</h3>
+                <p className="text-lg">
+                  {student.address || "Not provided"}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -252,6 +270,21 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
               Academic Information
             </h2>
             <div className="space-y-6">
+              {/* Course Information */}
+              <div>
+                <h3 className="text-lg font-medium mb-2">Course Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-500">Course Type</h4>
+                    <p>{getCourseCategoryLabel(student.course_type)}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-500">Course Name</h4>
+                    <p>{student.course_name || "Not provided"}</p>
+                  </div>
+                </div>
+              </div>
+
               {/* 10th Standard */}
               <div>
                 <h3 className="text-lg font-medium mb-2">10th Standard</h3>
@@ -340,8 +373,13 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
         </div>
 
         <div className="mt-6 flex justify-end no-print">
-        <Button onClick={() => handlePrint()}>
-                Download Application
+          {/* <Button onClick={handlePrint}>
+            Download Application
+          </Button> */}
+
+           {/* Button to trigger print */}
+             <Button onClick={() => handlePrint?.()}>
+               Download Application
              </Button>
         </div>
       </div>

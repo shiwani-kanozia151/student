@@ -37,6 +37,9 @@ interface FormData {
   motherName: string;
   fatherOccupation: string;
   motherOccupation: string;
+  address: string;
+  courseType: string;
+  courseName: string;
   tenthSchool: string;
   tenthPercentage: string;
   tenthBoard: string;
@@ -97,6 +100,9 @@ const ApplicationForm = () => {
     motherName: "",
     fatherOccupation: "",
     motherOccupation: "",
+    address: "",
+    courseType: "UG", // Default to Undergraduate
+    courseName: "Computer Science Engineering",
     tenthSchool: "",
     tenthPercentage: "",
     tenthBoard: "",
@@ -122,12 +128,15 @@ const ApplicationForm = () => {
         if (user) {
           const { data: profile } = await supabase
             .from('students')
-            .select('name')
+            .select('name, address')
             .eq('id', user.id)
             .single();
           
           if (profile?.name) {
             setStudentName(profile.name);
+            if (profile.address) {
+              setFormData(prev => ({ ...prev, address: profile.address }));
+            }
           }
         }
       } catch (err) {
@@ -190,8 +199,8 @@ const ApplicationForm = () => {
   
       const requiredFields = [
         'firstName', 'lastName', 'sex', 'age', 'contactNumber',
-        'fatherName', 'motherName', 'tenthSchool', 'tenthPercentage',
-        'twelfthSchool', 'twelfthPercentage'
+        'fatherName', 'motherName', 'address', 'courseType', 'courseName',
+        'tenthSchool', 'tenthPercentage', 'twelfthSchool', 'twelfthPercentage'
       ];
   
       const missingFields = requiredFields.filter(field => !formData[field]);
@@ -208,6 +217,9 @@ const ApplicationForm = () => {
           student_id: user.id,
           course_id: courseId,
           department: formData.department,
+          address: formData.address,
+          course_type: formData.courseType,
+          course_name: formData.courseName,
           personal_details: {
             name: fullName,
             sex: formData.sex,
@@ -282,6 +294,7 @@ const ApplicationForm = () => {
           name: fullName,
           email: user.email,
           phone: formData.contactNumber,
+          address: formData.address,
           department: formData.department,
           status: "pending",
           gender: formData.sex,
@@ -309,6 +322,7 @@ const ApplicationForm = () => {
       setLoading(false);
     }
   };
+
   const nextTab = () => {
     if (activeTab === "personal") setActiveTab("academic");
     else if (activeTab === "academic") setActiveTab("documents");
@@ -501,6 +515,47 @@ const ApplicationForm = () => {
                       id="motherOccupation"
                       name="motherOccupation"
                       value={formData.motherOccupation}
+                      onChange={handleInputChange}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+
+                <div className="col-span-full">
+                  <Label htmlFor="address">Address *</Label>
+                  <Textarea
+                    id="address"
+                    name="address"
+                    value={formData.address}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                    rows={3}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="courseType">Course Type *</Label>
+                    <Select
+                      value={formData.courseType}
+                      onValueChange={(value) => handleSelectChange("courseType", value)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select course type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="UG">Undergraduate</SelectItem>
+                        <SelectItem value="PG">Postgraduate</SelectItem>
+                        <SelectItem value="Research">Research/PhD</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="courseName">Course Name *</Label>
+                    <Input
+                      id="courseName"
+                      name="courseName"
+                      value={formData.courseName}
                       onChange={handleInputChange}
                       className="mt-1"
                     />

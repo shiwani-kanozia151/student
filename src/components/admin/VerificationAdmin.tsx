@@ -57,6 +57,8 @@ interface Student {
   status: "pending" | "approved" | "rejected";
   course_id?: string | null;
   course_level?: string | null;
+  course_type?: string | null;
+  course_name?: string | null;
   dob?: string | null;
   gender?: string | null;
   nationality?: string | null;
@@ -74,37 +76,39 @@ interface Student {
 }
 
 const getCourseCategoryLabel = (department?: string) => {
-  switch(department) {
-    case "UG": return "Undergraduate";
-    case "PG": return "Postgraduate";
-    case "Research": return "Research";
-    default: return department || "N/A";
+  switch (department) {
+    case "UG":
+      return "Undergraduate";
+    case "PG":
+      return "Postgraduate";
+    case "Research":
+      return "Research";
+    default:
+      return department || "N/A";
   }
 };
 
 const validateStudent = (student: any): Student | null => {
-  if (!student || typeof student !== 'object') return null;
+  if (!student || typeof student !== "object") return null;
 
-  if (!student.id || typeof student.id !== 'string') return null;
-  if (!student.created_at || typeof student.created_at !== 'string') return null;
-  if (!student.name || typeof student.name !== 'string') return null;
-  if (!student.status || !['pending', 'approved', 'rejected'].includes(student.status)) return null;
+  if (!student.id || typeof student.id !== "string") return null;
+  if (!student.created_at || typeof student.created_at !== "string") return null;
+  if (!student.name || typeof student.name !== "string") return null;
+  if (!student.status || !["pending", "approved", "rejected"].includes(student.status))
+    return null;
 
   const documents = Array.isArray(student.documents)
-    ? student.documents.filter((doc: any) => 
-        doc && typeof doc === 'object' && typeof doc.url === 'string'
-      )
+    ? student.documents.filter((doc: any) => doc && typeof doc === "object" && typeof doc.url === "string")
     : Array.isArray(student.student_documents)
-      ? student.student_documents.filter((doc: any) => 
-          doc && typeof doc === 'object' && typeof doc.url === 'string'
-        )
-      : [];
+    ? student.student_documents.filter((doc: any) => doc && typeof doc === "object" && typeof doc.url === "string")
+    : [];
 
   const status_history = Array.isArray(student.status_history)
     ? student.status_history.filter((item: any) =>
-        item && typeof item === 'object' &&
-        typeof item.status === 'string' &&
-        typeof item.changed_at === 'string'
+        item &&
+        typeof item === "object" &&
+        typeof item.status === "string" &&
+        typeof item.changed_at === "string"
       )
     : [];
 
@@ -112,24 +116,26 @@ const validateStudent = (student: any): Student | null => {
     ...student,
     documents,
     status_history,
-    email: typeof student.email === 'string' ? student.email : undefined,
-    phone: typeof student.phone === 'string' ? student.phone : undefined,
-    address: typeof student.address === 'string' ? student.address : undefined,
-    department: typeof student.department === 'string' ? student.department : undefined,
+    email: typeof student.email === "string" ? student.email : undefined,
+    phone: typeof student.phone === "string" ? student.phone : undefined,
+    address: typeof student.address === "string" ? student.address : undefined,
+    department: typeof student.department === "string" ? student.department : undefined,
     course_id: student.course_id || student.applications?.[0]?.course_id || null,
     course_level: student.course_level || student.applications?.[0]?.course_level || null,
-    dob: typeof student.dob === 'string' ? student.dob : null,
-    gender: typeof student.gender === 'string' ? student.gender : null,
-    nationality: typeof student.nationality === 'string' ? student.nationality : null,
-    admin_remarks: typeof student.admin_remarks === 'string' ? student.admin_remarks : null,
-    is_verified: typeof student.is_verified === 'boolean' ? student.is_verified : false,
-    updated_at: typeof student.updated_at === 'string' ? student.updated_at : undefined,
+    course_type: student.course_type || student.applications?.[0]?.course_type || null,
+    course_name: student.course_name || student.applications?.[0]?.course_name || null,
+    dob: typeof student.dob === "string" ? student.dob : null,
+    gender: typeof student.gender === "string" ? student.gender : null,
+    nationality: typeof student.nationality === "string" ? student.nationality : null,
+    admin_remarks: typeof student.admin_remarks === "string" ? student.admin_remarks : null,
+    is_verified: typeof student.is_verified === "boolean" ? student.is_verified : false,
+    updated_at: typeof student.updated_at === "string" ? student.updated_at : undefined,
     personal_details: student.personal_details || {},
-    academic_details: student.academic_details || {}
+    academic_details: student.academic_details || {},
   };
 };
 
-class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
 
   static getDerivedStateFromError() {
@@ -188,6 +194,8 @@ const VerificationAdmin = () => {
             course_id,
             department,
             course_level,
+            course_type,
+            course_name,
             status,
             admin_remarks,
             created_at
@@ -198,16 +206,20 @@ const VerificationAdmin = () => {
       if (studentsError) throw studentsError;
 
       const validatedStudents = (studentsData || [])
-        .map(student => validateStudent({
-          ...student,
-          ...(student.applications?.[0]?.personal_details || {}),
-          ...(student.applications?.[0]?.academic_details || {}),
-          documents: student.student_documents || [],
-          course_id: student.applications?.[0]?.course_id || null,
-          department: student.applications?.[0]?.department || null,
-          course_level: student.applications?.[0]?.course_level || null,
-          admin_remarks: student.applications?.[0]?.admin_remarks || null
-        }))
+        .map((student) =>
+          validateStudent({
+            ...student,
+            ...(student.applications?.[0]?.personal_details || {}),
+            ...(student.applications?.[0]?.academic_details || {}),
+            documents: student.student_documents || [],
+            course_id: student.applications?.[0]?.course_id || null,
+            department: student.applications?.[0]?.department || null,
+            course_level: student.applications?.[0]?.course_level || null,
+            course_type: student.applications?.[0]?.course_type || null,
+            course_name: student.applications?.[0]?.course_name || null,
+            admin_remarks: student.applications?.[0]?.admin_remarks || null,
+          })
+        )
         .filter(Boolean) as Student[];
 
       setStudents(validatedStudents);
@@ -243,7 +255,7 @@ const VerificationAdmin = () => {
   ) => {
     try {
       const remarks = adminRemarks.trim();
-      
+
       if ((status === "pending" || status === "rejected") && !remarks) {
         toast.error("Please provide remarks for pending or rejected status");
         return;
@@ -262,9 +274,9 @@ const VerificationAdmin = () => {
               status,
               changed_at: new Date().toISOString(),
               remarks: remarks,
-              changed_by: "admin"
-            }
-          ]
+              changed_by: "admin",
+            },
+          ],
         })
         .eq("id", studentId);
 
@@ -282,7 +294,7 @@ const VerificationAdmin = () => {
   const viewStudentDetails = async (studentId: string) => {
     try {
       setDocumentsLoading(true);
-      
+
       const { data: studentData, error: studentError } = await supabase
         .from("students")
         .select(`
@@ -302,6 +314,8 @@ const VerificationAdmin = () => {
             course_id,
             department,
             course_level,
+            course_type,
+            course_name,
             status,
             admin_remarks
           )
@@ -319,11 +333,18 @@ const VerificationAdmin = () => {
         ...studentData,
         ...(studentData.applications?.[0]?.personal_details || {}),
         ...(studentData.applications?.[0]?.academic_details || {}),
-        documents: studentData.student_documents || [],
+        documents: studentData.student_documents?.map((doc: any) => ({
+          ...doc,
+          url: doc.url.startsWith("http")
+            ? doc.url
+            : supabase.storage.from("applications").getPublicUrl(doc.url).data.publicUrl,
+        })) || [],
         course_id: studentData.applications?.[0]?.course_id || null,
         department: studentData.applications?.[0]?.department || null,
         course_level: studentData.applications?.[0]?.course_level || null,
-        admin_remarks: studentData.applications?.[0]?.admin_remarks || null
+        course_type: studentData.applications?.[0]?.course_type || null,
+        course_name: studentData.applications?.[0]?.course_name || null,
+        admin_remarks: studentData.applications?.[0]?.admin_remarks || null,
       });
 
       if (!validatedStudent) {
@@ -348,7 +369,8 @@ const VerificationAdmin = () => {
       (student.name?.toLowerCase().includes(search) || false) ||
       (student.email?.toLowerCase().includes(search) || false) ||
       (student.department?.toLowerCase().includes(search) || false) ||
-      (student.course_id?.toLowerCase().includes(search) || false)
+      (student.course_id?.toLowerCase().includes(search) || false) ||
+      (student.course_name?.toLowerCase().includes(search) || false)
     );
   });
 
@@ -407,6 +429,7 @@ const VerificationAdmin = () => {
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Course Type</TableHead>
+                    <TableHead>Course Name</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Action</TableHead>
                   </TableRow>
@@ -417,7 +440,8 @@ const VerificationAdmin = () => {
                       <TableRow key={student.id}>
                         <TableCell className="font-medium">{student.name || "N/A"}</TableCell>
                         <TableCell>{student.email || "N/A"}</TableCell>
-                        <TableCell>{getCourseCategoryLabel(student.department)}</TableCell>
+                        <TableCell>{getCourseCategoryLabel(student.course_type)}</TableCell>
+                        <TableCell>{student.course_name || "N/A"}</TableCell>
                         <TableCell>
                           <span
                             className={`px-2 py-1 rounded-full text-xs font-semibold ${
@@ -445,7 +469,7 @@ const VerificationAdmin = () => {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8">
+                      <TableCell colSpan={6} className="text-center py-8">
                         {students.length === 0
                           ? "No students found"
                           : "No matching students found"}
@@ -492,10 +516,10 @@ const VerificationAdmin = () => {
                           { label: "Date of Birth", value: selectedStudent.dob || "N/A" },
                           { label: "Gender", value: selectedStudent.gender || "N/A" },
                           { label: "Nationality", value: selectedStudent.nationality || "N/A" },
-                          { 
-                            label: "Address", 
+                          {
+                            label: "Address",
                             value: selectedStudent.address || "N/A",
-                            colSpan: "md:col-span-2" 
+                            colSpan: "md:col-span-2",
                           },
                         ].map((field, index) => (
                           <div key={index} className={field.colSpan || ""}>
@@ -510,17 +534,24 @@ const VerificationAdmin = () => {
                       <h3 className="font-medium text-lg">Academic Information</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
                         {[
-                          { 
-                            label: "Course Type", 
-                            value: getCourseCategoryLabel(selectedStudent.department) 
+                          {
+                            label: "Course Type",
+                            value: getCourseCategoryLabel(selectedStudent.course_type),
                           },
-                          { label: "Course Name", value: selectedStudent.course_id || "N/A" },
-                          { label: "Course Level", value: selectedStudent.course_level || "N/A" },
-                          { 
-                            label: "Registration Date", 
-                            value: selectedStudent.created_at 
-                              ? new Date(selectedStudent.created_at).toLocaleDateString() 
-                              : "N/A" 
+                          {
+                            label: "Course Name",
+                            value: selectedStudent.course_name || "N/A",
+                          },
+                          {
+                            label: "Course Level",
+                            value: selectedStudent.course_level || "N/A",
+                          },
+                          {
+                            label: "Registration Date",
+                            value:
+                              selectedStudent.created_at
+                                ? new Date(selectedStudent.created_at).toLocaleDateString()
+                                : "N/A",
                           },
                         ].map((field, index) => (
                           <div key={index}>
@@ -535,22 +566,32 @@ const VerificationAdmin = () => {
                       <h3 className="font-medium text-lg">Status History</h3>
                       <div className="bg-gray-50 p-4 rounded-lg">
                         {selectedStudent.status_history?.filter(
-                          entry => entry && typeof entry === 'object' && 
-                                   entry.status && entry.changed_at
+                          (entry) =>
+                            entry &&
+                            typeof entry === "object" &&
+                            entry.status &&
+                            entry.changed_at
                         ).length ? (
                           <div className="space-y-2">
                             {selectedStudent.status_history
-                              .filter(entry => entry && typeof entry === 'object' && 
-                                       entry.status && entry.changed_at)
+                              .filter(
+                                (entry) =>
+                                  entry &&
+                                  typeof entry === "object" &&
+                                  entry.status &&
+                                  entry.changed_at
+                              )
                               .map((entry, i) => {
-                                const status = typeof entry.status === 'string' 
-                                  ? entry.status.charAt(0).toUpperCase() + entry.status.slice(1)
-                                  : 'N/A';
-                                  
-                                const date = entry.changed_at
-                                  ? new Date(entry.changed_at).toLocaleString()
-                                  : 'N/A';
-                                  
+                                const status =
+                                  typeof entry.status === "string"
+                                    ? entry.status.charAt(0).toUpperCase() + entry.status.slice(1)
+                                    : "N/A";
+
+                                const date =
+                                  entry.changed_at
+                                    ? new Date(entry.changed_at).toLocaleString()
+                                    : "N/A";
+
                                 return (
                                   <div key={i} className="flex flex-col gap-1 border-b pb-2">
                                     <div className="flex justify-between">
@@ -582,9 +623,9 @@ const VerificationAdmin = () => {
                               className={`px-2 py-1 rounded-full text-xs font-semibold ${
                                 selectedStudent.status === "approved"
                                   ? "bg-green-100 text-green-800"
-                                : selectedStudent.status === "rejected"
+                                  : selectedStudent.status === "rejected"
                                   ? "bg-red-100 text-red-800"
-                                : "bg-yellow-100 text-yellow-800"
+                                  : "bg-yellow-100 text-yellow-800"
                               }`}
                             >
                               {selectedStudent.status?.charAt(0)?.toUpperCase() +
@@ -594,9 +635,13 @@ const VerificationAdmin = () => {
                         </div>
 
                         <div className="mb-6">
-                          <Label htmlFor="adminRemarks" className="block text-sm text-gray-500 mb-1">
+                          <Label
+                            htmlFor="adminRemarks"
+                            className="block text-sm text-gray-500 mb-1"
+                          >
                             Admin Remarks
-                            {(selectedStudent.status === "pending" || selectedStudent.status === "rejected") && (
+                            {(selectedStudent.status === "pending" ||
+                              selectedStudent.status === "rejected") && (
                               <span className="text-red-500"> *</span>
                             )}
                           </Label>
@@ -645,16 +690,17 @@ const VerificationAdmin = () => {
                         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-400"></div>
                       </div>
                     ) : selectedStudent?.documents?.filter(
-                        doc => doc && typeof doc === 'object' && doc.url
+                        (doc) => doc && typeof doc === "object" && doc.url
                       ).length ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {selectedStudent.documents
-                          .filter(doc => doc && typeof doc === 'object' && doc.url)
+                          .filter((doc) => doc && typeof doc === "object" && doc.url)
                           .map((doc) => {
-                            const docType = typeof doc.type === 'string'
-                              ? doc.type.replace(/_/g, ' ')
-                              : 'Document';
-                              
+                            const docType =
+                              typeof doc.type === "string"
+                                ? doc.type.replace(/_/g, " ")
+                                : "Document";
+
                             return (
                               <div key={doc.id || Math.random()} className="border rounded-lg p-4">
                                 <div className="flex justify-between items-center mb-4">
@@ -669,10 +715,11 @@ const VerificationAdmin = () => {
                                   {doc.url.toLowerCase().endsWith(".pdf") ? (
                                     <div className="h-full flex flex-col items-center justify-center p-4">
                                       <p className="text-gray-500 mb-2">PDF Document</p>
-                                      <Button 
-                                        variant="outline" 
+                                      <Button
+                                        variant="outline"
                                         size="sm"
                                         onClick={() => window.open(doc.url, "_blank")}
+                                        disabled={!doc.url.startsWith("http")}
                                       >
                                         View PDF
                                       </Button>
@@ -683,19 +730,21 @@ const VerificationAdmin = () => {
                                       alt={docType}
                                       className="w-full h-full object-contain"
                                       onError={(e) => {
-                                        (e.target as HTMLImageElement).src = '/document-placeholder.png';
+                                        (e.target as HTMLImageElement).src = "/document-placeholder.png";
+                                        console.error(`Failed to load image: ${doc.url}`);
                                       }}
                                     />
                                   )}
                                 </div>
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm text-gray-500 truncate">
-                                    {typeof doc.file_name === 'string' ? doc.file_name : "Document"}
+                                    {typeof doc.file_name === "string" ? doc.file_name : "Document"}
                                   </span>
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() => window.open(doc.url, "_blank")}
+                                    disabled={!doc.url.startsWith("http")}
                                   >
                                     View Full
                                   </Button>
