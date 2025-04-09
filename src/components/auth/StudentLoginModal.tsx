@@ -11,8 +11,9 @@ import { Label } from "@/components/ui/label";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { signIn, getCurrentUser } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
+import { useNavigate } from "react-router-dom";
 
-// Add this interface to type the user object
 interface AuthUser {
   id: string;
   email?: string;
@@ -37,6 +38,17 @@ const StudentLoginModal = ({
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const navigate = useNavigate();
+
+  const checkApplicationStatus = async (userId: string) => {
+    const { data, error } = await supabase
+      .from("applications")
+      .select("id, status")
+      .eq("student_id", userId)
+      .maybeSingle();
+
+    return data ? true : false;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,11 +62,17 @@ const StudentLoginModal = ({
       const response = await signIn(email, password);
 
       if (response.success) {
-        // Get user data to ensure we have a valid session
-        const user = await getCurrentUser() as AuthUser; // Type assertion
+        const user = await getCurrentUser() as AuthUser;
         if (user) {
-          console.log("Login successful, user:", user);
-          // Safely get the name from user metadata
+          // Check if application exists
+          const hasApplication = await checkApplicationStatus(user.id);
+          
+          if (hasApplication) {
+            // Redirect to dashboard if application exists
+            navigate("/student/dashboard");
+            return;
+          }
+
           const userName = user.user_metadata?.name || 
                           user.user_metadata?.full_name || 
                           "";
@@ -63,14 +81,9 @@ const StudentLoginModal = ({
             name: userName
           });
           onClose();
-        } else {
-          throw new Error("Failed to get user data after login");
         }
-      } else {
-        throw new Error(response.error || "Invalid credentials");
       }
-    } catch (err) {
-      console.error("Login error:", err);
+    } catch (err: any) {
       setError(err.message || "Login failed. Please try again.");
     } finally {
       setLoading(false);
@@ -94,6 +107,7 @@ const StudentLoginModal = ({
         )}
 
         <form onSubmit={handleLogin} className="space-y-6">
+          {/* Rest of your existing form JSX remains exactly the same */}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input

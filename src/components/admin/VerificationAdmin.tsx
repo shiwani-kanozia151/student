@@ -170,6 +170,7 @@ const VerificationAdmin = () => {
   const [adminRemarks, setAdminRemarks] = React.useState("");
   const [documentsLoading, setDocumentsLoading] = React.useState(false);
 
+  // Fetch students with real-time updates
   const fetchStudents = async () => {
     try {
       setLoading(true);
@@ -198,7 +199,8 @@ const VerificationAdmin = () => {
             course_name,
             status,
             admin_remarks,
-            created_at
+            created_at,
+            status_history
           )
         `)
         .order("created_at", { ascending: false });
@@ -218,6 +220,7 @@ const VerificationAdmin = () => {
             course_type: student.applications?.[0]?.course_type || null,
             course_name: student.applications?.[0]?.course_name || null,
             admin_remarks: student.applications?.[0]?.admin_remarks || null,
+            status_history: student.applications?.[0]?.status_history || [],
           })
         )
         .filter(Boolean) as Student[];
@@ -232,10 +235,11 @@ const VerificationAdmin = () => {
     }
   };
 
+  // Set up real-time subscription
   React.useEffect(() => {
     fetchStudents();
 
-    const channel = supabase
+    const studentsChannel = supabase
       .channel("students_changes")
       .on(
         "postgres_changes",
@@ -245,46 +249,92 @@ const VerificationAdmin = () => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(studentsChannel);
     };
   }, []);
 
-  const handleStatusUpdate = async (
-    studentId: string,
-    status: "pending" | "approved" | "rejected"
-  ) => {
-    try {
-      const remarks = adminRemarks.trim();
+  // Real-time updates for currently viewed student
+  React.useEffect(() => {
+    if (!selectedStudent?.id) return;
 
+    const applicationChannel = supabase
+      .channel(`application_${selectedStudent.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "applications",
+          filter: `student_id=eq.${selectedStudent.id}`
+        },
+        (payload) => {
+          setSelectedStudent(prev => ({
+            ...prev!,
+            status: payload.new.status,
+            admin_remarks: payload.new.admin_remarks,
+            status_history: [
+              ...(prev?.status_history || []),
+              {
+                status: payload.new.status,
+                changed_at: new Date().toISOString(),
+                remarks: payload.new.admin_remarks,
+                changed_by: "admin"
+              }
+            ]
+          }));
+          toast.success(`Status updated to ${payload.new.status}`);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(applicationChannel);
+    };
+  }, [selectedStudent?.id]);
+
+  const handleStatusUpdate = async (status: "pending" | "approved" | "rejected") => {
+    try {
+      if (!selectedStudent) return;
+      
+      const remarks = adminRemarks.trim();
+      
       if ((status === "pending" || status === "rejected") && !remarks) {
         toast.error("Please provide remarks for pending or rejected status");
         return;
       }
 
       const { error } = await supabase
-        .from("students")
+        .from("applications")
         .update({
           status,
           admin_remarks: remarks,
-          is_verified: status === "approved",
-          updated_at: new Date().toISOString(),
-          status_history: [
-            ...(selectedStudent?.status_history || []),
-            {
-              status,
-              changed_at: new Date().toISOString(),
-              remarks: remarks,
-              changed_by: "admin",
-            },
-          ],
+          updated_at: new Date().toISOString()
         })
-        .eq("id", studentId);
+        .eq("student_id", selectedStudent.id);
 
       if (error) throw error;
 
+      // Optimistically update local state
+      setStudents(prev => prev.map(s => 
+        s.id === selectedStudent.id 
+          ? { 
+              ...s, 
+              status, 
+              admin_remarks: remarks,
+              status_history: [
+                ...(s.status_history || []),
+                {
+                  status,
+                  changed_at: new Date().toISOString(),
+                  remarks: remarks,
+                  changed_by: "admin"
+                }
+              ]
+            } 
+          : s
+      ));
+
       toast.success(`Status updated to ${status}`);
-      setIsDetailsOpen(false);
-      fetchStudents();
     } catch (err) {
       console.error("Update error:", err);
       toast.error(err instanceof Error ? err.message : "Update failed");
@@ -317,7 +367,8 @@ const VerificationAdmin = () => {
             course_type,
             course_name,
             status,
-            admin_remarks
+            admin_remarks,
+            status_history
           )
         `)
         .eq("id", studentId)
@@ -345,6 +396,7 @@ const VerificationAdmin = () => {
         course_type: studentData.applications?.[0]?.course_type || null,
         course_name: studentData.applications?.[0]?.course_name || null,
         admin_remarks: studentData.applications?.[0]?.admin_remarks || null,
+        status_history: studentData.applications?.[0]?.status_history || [],
       });
 
       if (!validatedStudent) {
@@ -506,6 +558,7 @@ const VerificationAdmin = () => {
                   </TabsList>
 
                   <TabsContent value="details" className="space-y-6">
+                    {/* Personal Information Section */}
                     <div className="space-y-4">
                       <h3 className="font-medium text-lg">Personal Information</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
@@ -530,6 +583,7 @@ const VerificationAdmin = () => {
                       </div>
                     </div>
 
+                    {/* Academic Information Section */}
                     <div className="space-y-4">
                       <h3 className="font-medium text-lg">Academic Information</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
@@ -562,50 +616,29 @@ const VerificationAdmin = () => {
                       </div>
                     </div>
 
+                    {/* Status History Section */}
                     <div className="space-y-4">
                       <h3 className="font-medium text-lg">Status History</h3>
                       <div className="bg-gray-50 p-4 rounded-lg">
-                        {selectedStudent.status_history?.filter(
-                          (entry) =>
-                            entry &&
-                            typeof entry === "object" &&
-                            entry.status &&
-                            entry.changed_at
-                        ).length ? (
+                        {selectedStudent.status_history?.length ? (
                           <div className="space-y-2">
-                            {selectedStudent.status_history
-                              .filter(
-                                (entry) =>
-                                  entry &&
-                                  typeof entry === "object" &&
-                                  entry.status &&
-                                  entry.changed_at
-                              )
-                              .map((entry, i) => {
-                                const status =
-                                  typeof entry.status === "string"
-                                    ? entry.status.charAt(0).toUpperCase() + entry.status.slice(1)
-                                    : "N/A";
-
-                                const date =
-                                  entry.changed_at
-                                    ? new Date(entry.changed_at).toLocaleString()
-                                    : "N/A";
-
-                                return (
-                                  <div key={i} className="flex flex-col gap-1 border-b pb-2">
-                                    <div className="flex justify-between">
-                                      <span className="font-medium">{status}</span>
-                                      <span className="text-sm text-gray-500">{date}</span>
-                                    </div>
-                                    {entry.remarks && (
-                                      <div className="text-sm text-gray-500">
-                                        Remarks: {entry.remarks}
-                                      </div>
-                                    )}
+                            {selectedStudent.status_history.map((entry, i) => (
+                              <div key={i} className="flex flex-col gap-1 border-b pb-2">
+                                <div className="flex justify-between">
+                                  <span className="font-medium">
+                                    {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+                                  </span>
+                                  <span className="text-sm text-gray-500">
+                                    {new Date(entry.changed_at).toLocaleString()}
+                                  </span>
+                                </div>
+                                {entry.remarks && (
+                                  <div className="text-sm text-gray-500">
+                                    Remarks: {entry.remarks}
                                   </div>
-                                );
-                              })}
+                                )}
+                              </div>
+                            ))}
                           </div>
                         ) : (
                           <p className="text-gray-500">No status history available</p>
@@ -613,6 +646,7 @@ const VerificationAdmin = () => {
                       </div>
                     </div>
 
+                    {/* Verification Section */}
                     <div className="space-y-4">
                       <h3 className="font-medium text-lg">Verification</h3>
                       <div className="bg-gray-50 p-4 rounded-lg">
@@ -662,20 +696,20 @@ const VerificationAdmin = () => {
                         <div className="flex flex-col sm:flex-row justify-end gap-4">
                           <Button
                             variant="outline"
-                            onClick={() => handleStatusUpdate(selectedStudent.id, "pending")}
+                            onClick={() => handleStatusUpdate("pending")}
                             className="bg-yellow-50 hover:bg-yellow-100 text-yellow-800 border-yellow-200"
                           >
                             Keep Pending
                           </Button>
                           <Button
                             variant="destructive"
-                            onClick={() => handleStatusUpdate(selectedStudent.id, "rejected")}
+                            onClick={() => handleStatusUpdate("rejected")}
                           >
                             Reject
                           </Button>
                           <Button
                             className="bg-green-600 hover:bg-green-700"
-                            onClick={() => handleStatusUpdate(selectedStudent.id, "approved")}
+                            onClick={() => handleStatusUpdate("approved")}
                           >
                             Approve
                           </Button>
@@ -689,69 +723,57 @@ const VerificationAdmin = () => {
                       <div className="flex justify-center items-center h-40">
                         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-400"></div>
                       </div>
-                    ) : selectedStudent?.documents?.filter(
-                        (doc) => doc && typeof doc === "object" && doc.url
-                      ).length ? (
+                    ) : selectedStudent?.documents?.length ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {selectedStudent.documents
-                          .filter((doc) => doc && typeof doc === "object" && doc.url)
-                          .map((doc) => {
-                            const docType =
-                              typeof doc.type === "string"
-                                ? doc.type.replace(/_/g, " ")
-                                : "Document";
-
-                            return (
-                              <div key={doc.id || Math.random()} className="border rounded-lg p-4">
-                                <div className="flex justify-between items-center mb-4">
-                                  <h3 className="font-medium capitalize">{docType}</h3>
-                                  {doc.uploaded_at && (
-                                    <span className="text-xs text-gray-500">
-                                      {new Date(doc.uploaded_at).toLocaleDateString()}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="aspect-video bg-gray-100 rounded-md overflow-hidden mb-4 flex items-center justify-center">
-                                  {doc.url.toLowerCase().endsWith(".pdf") ? (
-                                    <div className="h-full flex flex-col items-center justify-center p-4">
-                                      <p className="text-gray-500 mb-2">PDF Document</p>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => window.open(doc.url, "_blank")}
-                                        disabled={!doc.url.startsWith("http")}
-                                      >
-                                        View PDF
-                                      </Button>
-                                    </div>
-                                  ) : (
-                                    <img
-                                      src={doc.url}
-                                      alt={docType}
-                                      className="w-full h-full object-contain"
-                                      onError={(e) => {
-                                        (e.target as HTMLImageElement).src = "/document-placeholder.png";
-                                        console.error(`Failed to load image: ${doc.url}`);
-                                      }}
-                                    />
-                                  )}
-                                </div>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-sm text-gray-500 truncate">
-                                    {typeof doc.file_name === "string" ? doc.file_name : "Document"}
-                                  </span>
+                        {selectedStudent.documents.map((doc) => (
+                          <div key={doc.id} className="border rounded-lg p-4">
+                            <div className="flex justify-between items-center mb-4">
+                              <h3 className="font-medium capitalize">
+                                {doc.type.replace(/_/g, " ")}
+                              </h3>
+                              {doc.uploaded_at && (
+                                <span className="text-xs text-gray-500">
+                                  {new Date(doc.uploaded_at).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                            <div className="aspect-video bg-gray-100 rounded-md overflow-hidden mb-4 flex items-center justify-center">
+                              {doc.url.toLowerCase().endsWith(".pdf") ? (
+                                <div className="h-full flex flex-col items-center justify-center p-4">
+                                  <p className="text-gray-500 mb-2">PDF Document</p>
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() => window.open(doc.url, "_blank")}
-                                    disabled={!doc.url.startsWith("http")}
                                   >
-                                    View Full
+                                    View PDF
                                   </Button>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              ) : (
+                                <img
+                                  src={doc.url}
+                                  alt={doc.type}
+                                  className="w-full h-full object-contain"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = "/document-placeholder.png";
+                                  }}
+                                />
+                              )}
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-500 truncate">
+                                {doc.file_name || "Document"}
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.open(doc.url, "_blank")}
+                              >
+                                View Full
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <div className="bg-gray-50 p-4 rounded-lg text-center">

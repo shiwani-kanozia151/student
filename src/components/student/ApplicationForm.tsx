@@ -120,6 +120,28 @@ const ApplicationForm = () => {
   });
 
   React.useEffect(() => {
+    const checkExistingApplication = async () => {
+      if (!user) return;
+      
+      try {
+        const { data: application } = await supabase
+          .from("applications")
+          .select("id, status")
+          .eq("student_id", user.id)
+          .maybeSingle();
+
+        if (application) {
+          navigate("/student/dashboard");
+        }
+      } catch (err) {
+        console.error("Error checking application:", err);
+      }
+    };
+
+    checkExistingApplication();
+  }, [user]);
+
+  React.useEffect(() => {
     const fetchUser = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -260,6 +282,13 @@ const ApplicationForm = () => {
         })
         .select()
         .single();
+
+        if (!appError) {
+          localStorage.setItem("hasSubmittedApplication", "true");
+          setSuccess(true);
+          toast.success("Application submitted successfully!");
+          setTimeout(() => navigate("/student/dashboard"), 2000);
+        }
 
       if (appError) throw appError;
 
