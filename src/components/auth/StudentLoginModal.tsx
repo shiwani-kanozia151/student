@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -11,8 +12,8 @@ import { Label } from "@/components/ui/label";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { signIn, getCurrentUser } from "@/lib/auth";
+import { toast } from "sonner";
 
-// Add this interface to type the user object
 interface AuthUser {
   id: string;
   email?: string;
@@ -25,18 +26,17 @@ interface AuthUser {
 interface StudentLoginModalProps {
   isOpen?: boolean;
   onClose?: () => void;
-  onLogin?: (data: { email: string; name?: string }) => void;
 }
 
 const StudentLoginModal = ({
   isOpen = true,
   onClose = () => {},
-  onLogin = () => {},
 }: StudentLoginModalProps) => {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,18 +50,11 @@ const StudentLoginModal = ({
       const response = await signIn(email, password);
 
       if (response.success) {
-        // Get user data to ensure we have a valid session
-        const user = await getCurrentUser() as AuthUser; // Type assertion
+        const user = await getCurrentUser() as AuthUser;
         if (user) {
-          console.log("Login successful, user:", user);
-          // Safely get the name from user metadata
-          const userName = user.user_metadata?.name || 
-                          user.user_metadata?.full_name || 
-                          "";
-          onLogin({ 
-            email: user.email || email,
-            name: userName
-          });
+          toast.success("Login successful");
+          // Redirect to student dashboard using your defined route
+          navigate("/student/dashboard");
           onClose();
         } else {
           throw new Error("Failed to get user data after login");
@@ -71,7 +64,8 @@ const StudentLoginModal = ({
       }
     } catch (err) {
       console.error("Login error:", err);
-      setError(err.message || "Login failed. Please try again.");
+      setError(err instanceof Error ? err.message : "Login failed. Please try again.");
+      toast.error("Login failed");
     } finally {
       setLoading(false);
     }
@@ -102,6 +96,7 @@ const StudentLoginModal = ({
               placeholder="Enter your email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
             />
           </div>
 
@@ -113,6 +108,7 @@ const StudentLoginModal = ({
               placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
             />
           </div>
 

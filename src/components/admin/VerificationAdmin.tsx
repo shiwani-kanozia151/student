@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Eye } from "lucide-react";
+import { Search, Eye, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import {
@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 
 interface Document {
   id?: string;
@@ -93,94 +94,6 @@ interface Student {
     };
     [key: string]: any;
   };
-  applications?: Array<{
-    course_name?: string;
-    academic_details?: any;
-    [key: string]: any;
-  }>;
-}
-
-const getCourseCategoryLabel = (courseType?: string) => {
-  switch(courseType) {
-    case "UG": return "Undergraduate";
-    case "PG": return "Postgraduate";
-    case "Research": return "Research";
-    default: return courseType || "N/A";
-  }
-};
-
-const validateStudent = (student: any): Student | null => {
-  if (!student || typeof student !== 'object') return null;
-
-  if (!student.id || typeof student.id !== 'string') return null;
-  if (!student.created_at || typeof student.created_at !== 'string') return null;
-  if (!student.name || typeof student.name !== 'string') return null;
-  if (!student.status || !['pending', 'approved', 'rejected'].includes(student.status)) return null;
-
-  const documents = Array.isArray(student.documents)
-    ? student.documents.filter((doc: any) => 
-        doc && typeof doc === 'object' && typeof doc.url === 'string'
-      )
-    : Array.isArray(student.student_documents)
-      ? student.student_documents.filter((doc: any) => 
-          doc && typeof doc === 'object' && typeof doc.url === 'string'
-        )
-      : [];
-
-  const status_history = Array.isArray(student.status_history)
-    ? student.status_history.filter((item: any) =>
-        item && typeof item === 'object' &&
-        typeof item.status === 'string' &&
-        typeof item.changed_at === 'string'
-      )
-    : [];
-
-  return {
-    ...student,
-    documents,
-    status_history,
-    email: typeof student.email === 'string' ? student.email : undefined,
-    phone: typeof student.phone === 'string' ? student.phone : undefined,
-    address: typeof student.address === 'string' ? student.address : undefined,
-    department: typeof student.department === 'string' ? student.department : undefined,
-    course_id: student.course_id || student.applications?.[0]?.course_id || null,
-    course_type: student.course_type || student.applications?.[0]?.course_type || null,
-    course_name: student.course_name || student.applications?.[0]?.course_name || null,
-    course_level: student.course_level || student.applications?.[0]?.course_level || null,
-    dob: typeof student.dob === 'string' ? student.dob : null,
-    gender: typeof student.gender === 'string' ? student.gender : null,
-    nationality: typeof student.nationality === 'string' ? student.nationality : null,
-    admin_remarks: typeof student.admin_remarks === 'string' ? student.admin_remarks : null,
-    is_verified: typeof student.is_verified === 'boolean' ? student.is_verified : false,
-    updated_at: typeof student.updated_at === 'string' ? student.updated_at : undefined,
-    personal_details: student.personal_details || {},
-    academic_details: student.academic_details || student.applications?.[0]?.academic_details || {}
-  };
-};
-
-class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
-  state = { hasError: false };
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("Error caught by ErrorBoundary:", error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="p-4 bg-red-50 text-red-700 rounded-lg">
-          <h2 className="font-bold">Something went wrong</h2>
-          <p>Please refresh the page or try again later.</p>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
 }
 
 const VerificationAdmin = () => {
@@ -192,6 +105,56 @@ const VerificationAdmin = () => {
   const [isDetailsOpen, setIsDetailsOpen] = React.useState(false);
   const [adminRemarks, setAdminRemarks] = React.useState("");
   const [documentsLoading, setDocumentsLoading] = React.useState(false);
+  const [isUpdating, setIsUpdating] = React.useState(false);
+
+  const getCourseCategoryLabel = (courseType?: string) => {
+    switch(courseType) {
+      case "UG": return "Undergraduate";
+      case "PG": return "Postgraduate";
+      case "Research": return "Research";
+      default: return courseType || "N/A";
+    }
+  };
+
+  const validateStudent = (student: any): Student | null => {
+    if (!student || typeof student !== 'object') return null;
+    if (!student.id || typeof student.id !== 'string') return null;
+    if (!student.created_at || typeof student.created_at !== 'string') return null;
+    if (!student.name || typeof student.name !== 'string') return null;
+    if (!student.status || !['pending', 'approved', 'rejected'].includes(student.status)) return null;
+
+    const documents = Array.isArray(student.documents)
+      ? student.documents.filter((doc: any) => doc?.url)
+      : Array.isArray(student.student_documents)
+        ? student.student_documents.filter((doc: any) => doc?.url)
+        : [];
+
+    const status_history = Array.isArray(student.status_history)
+      ? student.status_history.filter((item: any) => item?.status && item?.changed_at)
+      : [];
+
+    return {
+      ...student,
+      documents,
+      status_history,
+      email: typeof student.email === 'string' ? student.email : undefined,
+      phone: typeof student.phone === 'string' ? student.phone : undefined,
+      address: typeof student.address === 'string' ? student.address : undefined,
+      department: typeof student.department === 'string' ? student.department : undefined,
+      course_id: student.course_id || student.applications?.[0]?.course_id || null,
+      course_type: student.course_type || student.applications?.[0]?.course_type || null,
+      course_name: student.course_name || student.applications?.[0]?.course_name || null,
+      course_level: student.course_level || student.applications?.[0]?.course_level || null,
+      dob: typeof student.dob === 'string' ? student.dob : null,
+      gender: typeof student.gender === 'string' ? student.gender : null,
+      nationality: typeof student.nationality === 'string' ? student.nationality : null,
+      remarks: typeof student.remarks === 'string' ? student.remarks : null,
+      is_verified: typeof student.is_verified === 'boolean' ? student.is_verified : false,
+      updated_at: typeof student.updated_at === 'string' ? student.updated_at : undefined,
+      personal_details: student.personal_details || student.applications?.[0]?.personal_details || {},
+      academic_details: student.academic_details || student.applications?.[0]?.academic_details || {}
+    };
+  };
 
   const fetchStudents = async () => {
     try {
@@ -219,6 +182,7 @@ const VerificationAdmin = () => {
             course_name,
             status,
             remarks,
+            status_history,
             created_at
           )
         `)
@@ -231,10 +195,9 @@ const VerificationAdmin = () => {
           ...student,
           ...(student.applications?.[0]?.personal_details || {}),
           documents: student.student_documents || [],
-          course_id: student.applications?.[0]?.course_id || null,
-          course_type: student.applications?.[0]?.course_type || null,
-          course_name: student.applications?.[0]?.course_name || null,
-          admin_remarks: student.applications?.[0]?.admin_remarks || null
+          status_history: student.applications?.[0]?.status_history || [],
+          status: student.applications?.[0]?.status || student.status,
+          remarks: student.applications?.[0]?.remarks || student.remarks
         }))
         .filter(Boolean) as Student[];
 
@@ -255,13 +218,31 @@ const VerificationAdmin = () => {
       .channel("students_changes")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "students" },
+        { 
+          event: "*", 
+          schema: "public", 
+          table: "students" 
+        },
+        fetchStudents
+      )
+      .subscribe();
+
+    const applicationsChannel = supabase
+      .channel("applications_changes")
+      .on(
+        "postgres_changes",
+        { 
+          event: "*", 
+          schema: "public", 
+          table: "applications" 
+        },
         fetchStudents
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(applicationsChannel);
     };
   }, []);
 
@@ -270,6 +251,7 @@ const VerificationAdmin = () => {
     status: "pending" | "approved" | "rejected"
   ) => {
     try {
+      setIsUpdating(true);
       const remarks = adminRemarks.trim();
       
       if ((status === "pending" || status === "rejected") && !remarks) {
@@ -277,26 +259,42 @@ const VerificationAdmin = () => {
         return;
       }
 
-      const { error } = await supabase
+      const updateTime = new Date().toISOString();
+      const statusUpdate = {
+        status,
+        remarks,
+        is_verified: status === "approved",
+        updated_at: updateTime,
+        status_history: [
+          ...(selectedStudent?.status_history || []),
+          {
+            status,
+            changed_at: updateTime,
+            remarks: remarks,
+            changed_by: "admin"
+          }
+        ]
+      };
+
+      // Update both students and applications tables
+      const { error: studentError } = await supabase
         .from("students")
-        .update({
-          status,
-          admin_remarks: remarks,
-          is_verified: status === "approved",
-          updated_at: new Date().toISOString(),
-          status_history: [
-            ...(selectedStudent?.status_history || []),
-            {
-              status,
-              changed_at: new Date().toISOString(),
-              remarks: remarks,
-              changed_by: "admin"
-            }
-          ]
-        })
+        .update(statusUpdate)
         .eq("id", studentId);
 
-      if (error) throw error;
+      const { error: applicationError } = await supabase
+        .from("applications")
+        .update({
+          status,
+          remarks,
+          status_history: statusUpdate.status_history,
+          updated_at: updateTime
+        })
+        .eq("student_id", studentId);
+
+      if (studentError || applicationError) {
+        throw studentError || applicationError;
+      }
 
       toast.success(`Status updated to ${status}`);
       setIsDetailsOpen(false);
@@ -304,6 +302,8 @@ const VerificationAdmin = () => {
     } catch (err) {
       console.error("Update error:", err);
       toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -331,7 +331,8 @@ const VerificationAdmin = () => {
             course_type,
             course_name,
             status,
-            remarks
+            remarks,
+            status_history
           )
         `)
         .eq("id", studentId)
@@ -347,10 +348,9 @@ const VerificationAdmin = () => {
         ...studentData,
         ...(studentData.applications?.[0]?.personal_details || {}),
         documents: studentData.student_documents || [],
-        course_id: studentData.applications?.[0]?.course_id || null,
-        course_type: studentData.applications?.[0]?.course_type || null,
-        course_name: studentData.applications?.[0]?.course_name || null,
-        admin_remarks: studentData.applications?.[0]?.admin_remarks || null
+        status_history: studentData.applications?.[0]?.status_history || [],
+        status: studentData.applications?.[0]?.status || studentData.status,
+        remarks: studentData.applications?.[0]?.remarks || studentData.remarks
       });
 
       if (!validatedStudent) {
@@ -379,6 +379,17 @@ const VerificationAdmin = () => {
     );
   });
 
+  const getStatusBadge = (status: string) => {
+    switch(status) {
+      case "approved":
+        return <Badge className="bg-green-100 text-green-800">{status}</Badge>;
+      case "rejected":
+        return <Badge className="bg-red-100 text-red-800">{status}</Badge>;
+      default:
+        return <Badge className="bg-yellow-100 text-yellow-800">{status}</Badge>;
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 p-6">
@@ -396,94 +407,87 @@ const VerificationAdmin = () => {
   }
 
   return (
-    <ErrorBoundary>
-      <div className="min-h-screen bg-gray-100 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold text-[#0A2240]">
-              Student Verification Dashboard
-            </h1>
+    <div className="min-h-screen bg-gray-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-[#0A2240]">
+            Student Verification Dashboard
+          </h1>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={fetchStudents}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                placeholder="Search by name, email, or course..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
           </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
-              {error}
-            </div>
-          )}
-
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input
-                  placeholder="Search by name, email, or course..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <Button variant="outline" size="sm" onClick={fetchStudents}>
-                Refresh
-              </Button>
-            </div>
-
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader className="bg-gray-50">
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Course Type</TableHead>
-                    <TableHead>Course Name</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredStudents.length > 0 ? (
-                    filteredStudents.map((student) => (
-                      <TableRow key={student.id}>
-                        <TableCell className="font-medium">{student.name || "N/A"}</TableCell>
-                        <TableCell>{student.email || "N/A"}</TableCell>
-                        <TableCell>{getCourseCategoryLabel(student.course_type)}</TableCell>
-                        <TableCell>{student.course_name || "N/A"}</TableCell>
-                        <TableCell>
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                              student.status === "approved"
-                                ? "bg-green-100 text-green-800"
-                                : student.status === "rejected"
-                                ? "bg-red-100 text-red-800"
-                                : "bg-yellow-100 text-yellow-800"
-                            }`}
-                          >
-                            {student.status?.charAt(0)?.toUpperCase() +
-                              student.status?.slice(1) || "N/A"}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => viewStudentDetails(student.id)}
-                          >
-                            <Eye className="h-4 w-4 mr-2" /> View
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8">
-                        {students.length === 0
-                          ? "No students found"
-                          : "No matching students found"}
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader className="bg-gray-50">
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Course Type</TableHead>
+                  <TableHead>Course Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredStudents.length > 0 ? (
+                  filteredStudents.map((student) => (
+                    <TableRow key={student.id}>
+                      <TableCell className="font-medium">{student.name || "N/A"}</TableCell>
+                      <TableCell>{student.email || "N/A"}</TableCell>
+                      <TableCell>{getCourseCategoryLabel(student.course_type)}</TableCell>
+                      <TableCell>{student.course_name || "N/A"}</TableCell>
+                      <TableCell>
+                        {getStatusBadge(student.status)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => viewStudentDetails(student.id)}
+                        >
+                          <Eye className="h-4 w-4 mr-2" /> View
+                        </Button>
                       </TableCell>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8">
+                      {students.length === 0
+                        ? "No students found"
+                        : "No matching students found"}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </div>
         </div>
 
@@ -511,30 +515,28 @@ const VerificationAdmin = () => {
                   </TabsList>
 
                   <TabsContent value="details" className="space-y-6">
+                    {/* Personal Information Section */}
                     <div className="space-y-4">
                       <h3 className="font-medium text-lg">Personal Information</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
                         {[
-                          { label: "Full Name", value: selectedStudent.name || "N/A" },
-                          { label: "Email", value: selectedStudent.email || "N/A" },
-                          { label: "Phone", value: selectedStudent.phone || "N/A" },
-                          { label: "Date of Birth", value: selectedStudent.dob || "N/A" },
-                          { label: "Gender", value: selectedStudent.gender || "N/A" },
-                          { label: "Nationality", value: selectedStudent.nationality || "N/A" },
-                          { 
-                            label: "Address", 
-                            value: selectedStudent.address || "N/A",
-                            colSpan: "md:col-span-2" 
-                          },
+                          { label: "Full Name", value: selectedStudent.name },
+                          { label: "Email", value: selectedStudent.email },
+                          { label: "Phone", value: selectedStudent.phone },
+                          { label: "Date of Birth", value: selectedStudent.dob },
+                          { label: "Gender", value: selectedStudent.gender },
+                          { label: "Nationality", value: selectedStudent.nationality },
+                          { label: "Address", value: selectedStudent.address, colSpan: "md:col-span-2" },
                         ].map((field, index) => (
                           <div key={index} className={field.colSpan || ""}>
                             <Label className="text-sm text-gray-500">{field.label}</Label>
-                            <p className="font-medium">{field.value}</p>
+                            <p className="font-medium">{field.value || "N/A"}</p>
                           </div>
                         ))}
                       </div>
                     </div>
 
+                    {/* Academic Information Section */}
                     <div className="space-y-4">
                       <h3 className="font-medium text-lg">Academic Information</h3>
                       <div className="bg-gray-50 p-4 rounded-lg space-y-4">
@@ -543,7 +545,7 @@ const VerificationAdmin = () => {
                           <div>
                             <Label className="text-sm text-gray-500">Course Type</Label>
                             <p className="font-medium">
-                              {getCourseCategoryLabel(selectedStudent.course_type) || "N/A"}
+                              {getCourseCategoryLabel(selectedStudent.course_type)}
                             </p>
                           </div>
                           <div>
@@ -555,129 +557,67 @@ const VerificationAdmin = () => {
                           <div>
                             <Label className="text-sm text-gray-500">Registration Date</Label>
                             <p className="font-medium">
-                              {selectedStudent.created_at
-                                ? new Date(selectedStudent.created_at).toLocaleDateString()
-                                : "N/A"}
+                              {new Date(selectedStudent.created_at).toLocaleDateString()}
                             </p>
                           </div>
                         </div>
 
-                        {/* 10th Standard Details */}
-                        <div>
-                          <Label className="text-sm text-gray-500 font-medium">10th Standard</Label>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-                            <div>
-                              <Label className="text-sm text-gray-500">School</Label>
-                              <p>{selectedStudent.academic_details?.tenth?.school || "N/A"}</p>
-                            </div>
-                            <div>
-                              <Label className="text-sm text-gray-500">Percentage</Label>
-                              <p>{selectedStudent.academic_details?.tenth?.percentage || "N/A"}</p>
-                            </div>
-                            <div>
-                              <Label className="text-sm text-gray-500">Board</Label>
-                              <p>{selectedStudent.academic_details?.tenth?.board || "N/A"}</p>
-                            </div>
-                          </div>
-                        </div>
+                        {/* Academic Details */}
+                        {['tenth', 'twelfth', 'graduation'].map((level) => {
+                          const data = selectedStudent.academic_details?.[level];
+                          if (!data) return null;
 
-                        {/* 12th Standard Details */}
-                        <div>
-                          <Label className="text-sm text-gray-500 font-medium">12th Standard</Label>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-                            <div>
-                              <Label className="text-sm text-gray-500">School</Label>
-                              <p>{selectedStudent.academic_details?.twelfth?.school || "N/A"}</p>
-                            </div>
-                            <div>
-                              <Label className="text-sm text-gray-500">Percentage</Label>
-                              <p>{selectedStudent.academic_details?.twelfth?.percentage || "N/A"}</p>
-                            </div>
-                            <div>
-                              <Label className="text-sm text-gray-500">Board</Label>
-                              <p>{selectedStudent.academic_details?.twelfth?.board || "N/A"}</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Graduation Details (for PG/Research) */}
-                        {(selectedStudent.course_type === "PG" || selectedStudent.course_type === "Research") && (
-                          <div>
-                            <Label className="text-sm text-gray-500 font-medium">Graduation Details</Label>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-                              <div>
-                                <Label className="text-sm text-gray-500">College</Label>
-                                <p>{selectedStudent.academic_details?.graduation?.school || "N/A"}</p>
-                              </div>
-                              <div>
-                                <Label className="text-sm text-gray-500">Percentage</Label>
-                                <p>{selectedStudent.academic_details?.graduation?.percentage || "N/A"}</p>
-                              </div>
-                              <div>
-                                <Label className="text-sm text-gray-500">Degree</Label>
-                                <p>{selectedStudent.academic_details?.graduation?.degree || "N/A"}</p>
+                          return (
+                            <div key={level}>
+                              <Label className="text-sm text-gray-500 font-medium">
+                                {level.charAt(0).toUpperCase() + level.slice(1)} Details
+                              </Label>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+                                {Object.entries(data).map(([key, value]) => (
+                                  <div key={key}>
+                                    <Label className="text-sm text-gray-500">
+                                      {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ')}
+                                    </Label>
+                                    <p>{String(value) || "N/A"}</p>
+                                  </div>
+                                ))}
                               </div>
                             </div>
-                          </div>
-                        )}
-
-                        {/* Entrance Exam Details */}
-                        {selectedStudent.academic_details?.entrance?.exam && (
-                          <div>
-                            <Label className="text-sm text-gray-500 font-medium">Entrance Exam</Label>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-                              <div>
-                                <Label className="text-sm text-gray-500">Exam</Label>
-                                <p>{selectedStudent.academic_details?.entrance?.exam || "N/A"}</p>
-                              </div>
-                              <div>
-                                <Label className="text-sm text-gray-500">Score</Label>
-                                <p>{selectedStudent.academic_details?.entrance?.score || "N/A"}</p>
-                              </div>
-                              <div>
-                                <Label className="text-sm text-gray-500">Rank</Label>
-                                <p>{selectedStudent.academic_details?.entrance?.rank || "N/A"}</p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                          );
+                        })}
                       </div>
                     </div>
 
+                    {/* Status History Section */}
                     <div className="space-y-4">
                       <h3 className="font-medium text-lg">Status History</h3>
                       <div className="bg-gray-50 p-4 rounded-lg">
-                        {selectedStudent.status_history?.filter(
-                          entry => entry && typeof entry === 'object' && 
-                                   entry.status && entry.changed_at
-                        ).length ? (
+                        {selectedStudent.status_history?.length ? (
                           <div className="space-y-2">
                             {selectedStudent.status_history
-                              .filter(entry => entry && typeof entry === 'object' && 
-                                       entry.status && entry.changed_at)
-                              .map((entry, i) => {
-                                const status = typeof entry.status === 'string' 
-                                  ? entry.status.charAt(0).toUpperCase() + entry.status.slice(1)
-                                  : 'N/A';
-                                  
-                                const date = entry.changed_at
-                                  ? new Date(entry.changed_at).toLocaleString()
-                                  : 'N/A';
-                                  
-                                return (
-                                  <div key={i} className="flex flex-col gap-1 border-b pb-2">
-                                    <div className="flex justify-between">
-                                      <span className="font-medium">{status}</span>
-                                      <span className="text-sm text-gray-500">{date}</span>
-                                    </div>
-                                    {entry.remarks && (
-                                      <div className="text-sm text-gray-500">
-                                        Remarks: {entry.remarks}
-                                      </div>
-                                    )}
+                              .sort((a, b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime())
+                              .map((entry, i) => (
+                                <div key={i} className="flex flex-col gap-1 border-b pb-2 last:border-0">
+                                  <div className="flex justify-between">
+                                    <span className="font-medium">
+                                      {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+                                    </span>
+                                    <span className="text-sm text-gray-500">
+                                      {new Date(entry.changed_at).toLocaleString()}
+                                    </span>
                                   </div>
-                                );
-                              })}
+                                  {entry.remarks && (
+                                    <div className="text-sm text-gray-500">
+                                      Remarks: {entry.remarks}
+                                    </div>
+                                  )}
+                                  {entry.changed_by && (
+                                    <div className="text-xs text-gray-400">
+                                      By {entry.changed_by}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
                           </div>
                         ) : (
                           <p className="text-gray-500">No status history available</p>
@@ -685,25 +625,15 @@ const VerificationAdmin = () => {
                       </div>
                     </div>
 
+                    {/* Verification Section */}
                     <div className="space-y-4">
                       <h3 className="font-medium text-lg">Verification</h3>
                       <div className="bg-gray-50 p-4 rounded-lg">
                         <div className="mb-4">
                           <Label className="text-sm text-gray-500">Current Status</Label>
-                          <p className="font-medium">
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                selectedStudent.status === "approved"
-                                  ? "bg-green-100 text-green-800"
-                                : selectedStudent.status === "rejected"
-                                  ? "bg-red-100 text-red-800"
-                                : "bg-yellow-100 text-yellow-800"
-                              }`}
-                            >
-                              {selectedStudent.status?.charAt(0)?.toUpperCase() +
-                                selectedStudent.status?.slice(1) || "N/A"}
-                            </span>
-                          </p>
+                          <div className="mt-1">
+                            {getStatusBadge(selectedStudent.status)}
+                          </div>
                         </div>
 
                         <div className="mb-6">
@@ -732,20 +662,23 @@ const VerificationAdmin = () => {
                             variant="outline"
                             onClick={() => handleStatusUpdate(selectedStudent.id, "pending")}
                             className="bg-yellow-50 hover:bg-yellow-100 text-yellow-800 border-yellow-200"
+                            disabled={isUpdating}
                           >
-                            Keep Pending
+                            {isUpdating ? "Processing..." : "Keep Pending"}
                           </Button>
                           <Button
                             variant="destructive"
                             onClick={() => handleStatusUpdate(selectedStudent.id, "rejected")}
+                            disabled={isUpdating}
                           >
-                            Reject
+                            {isUpdating ? "Processing..." : "Reject"}
                           </Button>
                           <Button
                             className="bg-green-600 hover:bg-green-700"
                             onClick={() => handleStatusUpdate(selectedStudent.id, "approved")}
+                            disabled={isUpdating}
                           >
-                            Approve
+                            {isUpdating ? "Processing..." : "Approve"}
                           </Button>
                         </div>
                       </div>
@@ -757,65 +690,57 @@ const VerificationAdmin = () => {
                       <div className="flex justify-center items-center h-40">
                         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-400"></div>
                       </div>
-                    ) : selectedStudent?.documents?.filter(
-                        doc => doc && typeof doc === 'object' && doc.url
-                      ).length ? (
+                    ) : selectedStudent?.documents?.length ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {selectedStudent.documents
-                          .filter(doc => doc && typeof doc === 'object' && doc.url)
-                          .map((doc) => {
-                            const docType = typeof doc.type === 'string'
-                              ? doc.type.replace(/_/g, ' ')
-                              : 'Document';
-                              
-                            return (
-                              <div key={doc.id || Math.random()} className="border rounded-lg p-4">
-                                <div className="flex justify-between items-center mb-4">
-                                  <h3 className="font-medium capitalize">{docType}</h3>
-                                  {doc.uploaded_at && (
-                                    <span className="text-xs text-gray-500">
-                                      {new Date(doc.uploaded_at).toLocaleDateString()}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="aspect-video bg-gray-100 rounded-md overflow-hidden mb-4 flex items-center justify-center">
-                                  {doc.url.toLowerCase().endsWith(".pdf") ? (
-                                    <div className="h-full flex flex-col items-center justify-center p-4">
-                                      <p className="text-gray-500 mb-2">PDF Document</p>
-                                      <Button 
-                                        variant="outline" 
-                                        size="sm"
-                                        onClick={() => window.open(doc.url, "_blank")}
-                                      >
-                                        View PDF
-                                      </Button>
-                                    </div>
-                                  ) : (
-                                    <img
-                                      src={doc.url}
-                                      alt={docType}
-                                      className="w-full h-full object-contain"
-                                      onError={(e) => {
-                                        (e.target as HTMLImageElement).src = '/document-placeholder.png';
-                                      }}
-                                    />
-                                  )}
-                                </div>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-sm text-gray-500 truncate">
-                                    {typeof doc.name === 'string' ? doc.name : "Document"}
-                                  </span>
-                                  <Button
-                                    variant="outline"
+                        {selectedStudent.documents.map((doc) => (
+                          <div key={doc.id || Math.random()} className="border rounded-lg p-4">
+                            <div className="flex justify-between items-center mb-4">
+                              <h3 className="font-medium capitalize">
+                                {doc.type?.replace(/_/g, ' ')}
+                              </h3>
+                              {doc.uploaded_at && (
+                                <span className="text-xs text-gray-500">
+                                  {new Date(doc.uploaded_at).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                            <div className="aspect-video bg-gray-100 rounded-md overflow-hidden mb-4 flex items-center justify-center">
+                              {doc.url.toLowerCase().endsWith(".pdf") ? (
+                                <div className="h-full flex flex-col items-center justify-center p-4">
+                                  <p className="text-gray-500 mb-2">PDF Document</p>
+                                  <Button 
+                                    variant="outline" 
                                     size="sm"
                                     onClick={() => window.open(doc.url, "_blank")}
                                   >
-                                    View Full
+                                    View PDF
                                   </Button>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              ) : (
+                                <img
+                                  src={doc.url}
+                                  alt={doc.type}
+                                  className="w-full h-full object-contain"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = '/document-placeholder.png';
+                                  }}
+                                />
+                              )}
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-500 truncate">
+                                {doc.name || "Document"}
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.open(doc.url, "_blank")}
+                              >
+                                View Full
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <div className="bg-gray-50 p-4 rounded-lg text-center">
@@ -825,7 +750,11 @@ const VerificationAdmin = () => {
                   </TabsContent>
                 </Tabs>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsDetailsOpen(false)}>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsDetailsOpen(false)}
+                    disabled={isUpdating}
+                  >
                     Close
                   </Button>
                 </DialogFooter>
@@ -834,7 +763,7 @@ const VerificationAdmin = () => {
           </DialogContent>
         </Dialog>
       </div>
-    </ErrorBoundary>
+    </div>
   );
 };
 
