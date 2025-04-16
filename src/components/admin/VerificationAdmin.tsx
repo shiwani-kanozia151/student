@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { sendStatusEmail } from "@/lib/emailService";
 
 interface Document {
   id?: string;
@@ -59,7 +60,7 @@ interface Student {
   is_verified: boolean;
   status_history?: StatusHistoryItem[];
   phone?: string;
-  remarks?: string | null;
+  admin_remarks?: string | null;
   name: string;
   email?: string;
   department?: string;
@@ -130,6 +131,9 @@ const VerificationAdmin = () => {
     twelfth_marksheet: false,
     entrance_scorecard: false,
   });
+  const [showEmailSentPopup, setShowEmailSentPopup] = React.useState(false);
+  const [emailSentTo, setEmailSentTo] = React.useState("");
+  const [emailStatus, setEmailStatus] = React.useState<"pending" | "approved" | "rejected">("pending");
 
   React.useEffect(() => {
     if (selectedStudent) {
@@ -288,70 +292,61 @@ const VerificationAdmin = () => {
     };
   }, []);
 
-  const handleStatusUpdate = async (
-    studentId: string,
-    status: "pending" | "approved" | "rejected"
-  ) => {
+  const handleStatusUpdate = async (status: "pending" | "approved" | "rejected") => {
+    if (!selectedStudent) return;
+  
     try {
       setIsUpdating(true);
-      const remarks = adminRemarks.trim();
-      
+      const remarks = adminRemarks.trim(); // This comes from your state
+  
       if ((status === "pending" || status === "rejected") && !remarks) {
-        toast.error("Please provide remarks for pending or rejected status");
+        toast.error("Please provide remarks for pending/rejected status");
         return;
       }
-
+  
       const updateTime = new Date().toISOString();
-      const statusUpdate = {
-        status,
-        remarks,
-        is_verified: status === "approved",
-        updated_at: updateTime,
-        document_verification: status === "approved" ? documentVerification : null,
-        status_history: [
-          ...(selectedStudent?.status_history || []),
-          {
-            status,
-            changed_at: updateTime,
-            remarks: remarks,
-            changed_by: "admin",
-            document_verification: status === "approved" ? documentVerification : null
-          }
-        ]
-      };
-
+      
+      // Update students table - use 'admin_remarks' as the column name but 'remarks' as the value
       const { error: studentError } = await supabase
         .from("students")
-        .update(statusUpdate)
-        .eq("id", studentId);
-
+        .update({
+          status,
+          admin_remarks: remarks, // Column name: admin_remarks, value: remarks
+          is_verified: status === "approved",
+          updated_at: updateTime,
+        })
+        .eq("id", selectedStudent.id);
+  
+      // Update applications table
       const { error: applicationError } = await supabase
         .from("applications")
         .update({
           status,
-          remarks,
-          status_history: statusUpdate.status_history,
+          remarks, // applications table uses 'remarks' column
           updated_at: updateTime,
-          document_verification: statusUpdate.document_verification
+          ...(status === "approved" && { document_verification: documentVerification }),
         })
-        .eq("student_id", studentId);
-
-      if (studentError || applicationError) {
-        throw studentError || applicationError;
+        .eq("student_id", selectedStudent.id);
+  
+      if (studentError || applicationError) throw studentError || applicationError;
+  
+      if (selectedStudent.email) {
+        await sendStatusEmail(selectedStudent.email, status, remarks);
+        setEmailSentTo(selectedStudent.email);
+        setEmailStatus(status);
+        setShowEmailSentPopup(true);
       }
-
-      toast.success(`Status updated to ${status}`);
+      
       setIsDetailsOpen(false);
       fetchStudents();
     } catch (err) {
       console.error("Update error:", err);
-      toast.error(err instanceof Error ? err.message : "Update failed");
+      toast.error("Failed to update status");
     } finally {
       setIsUpdating(false);
     }
   };
-
-  const viewStudentDetails = async (studentId: string) => {
+     const viewStudentDetails = async (studentId: string) => {
     try {
       setDocumentsLoading(true);
       
@@ -404,7 +399,7 @@ const VerificationAdmin = () => {
       }
 
       setSelectedStudent(validatedStudent);
-      setAdminRemarks(validatedStudent.remarks || "");
+      setAdminRemarks(validatedStudent.admin_remarks || "");
       setIsDetailsOpen(true);
     } catch (err) {
       console.error("Error loading student details:", err);
@@ -494,6 +489,45 @@ const VerificationAdmin = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
+    {/* Email Sent Popup */}
+    {showEmailSentPopup && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
+          <div className="flex items-start">
+            <div className="flex-shrink-0 mt-0.5">
+              <Check className="h-6 w-6 text-green-500" />
+            </div>
+            <div className="ml-3">
+              <h3 className="font-bold text-lg mb-1">
+                Status Update Notification Sent
+              </h3>
+              <div className="mt-2">
+                <p className="text-gray-700">
+                  An email has been sent to: <span className="font-semibold">{emailSentTo}</span>
+                </p>
+                <p className="mt-2">
+                  Status: <span className="font-semibold capitalize">{emailStatus}</span>
+                </p>
+                {adminRemarks && (
+                  <div className="mt-3">
+                    <p className="text-sm text-gray-500">Remarks:</p>
+                    <p className="text-gray-700 mt-1">{adminRemarks}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button
+              onClick={() => setShowEmailSentPopup(false)}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              OK
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-[#0A2240]">
@@ -509,13 +543,13 @@ const VerificationAdmin = () => {
             Refresh
           </Button>
         </div>
-
+  
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
             {error}
           </div>
         )}
-
+  
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center gap-4 mb-6">
             <div className="relative flex-1">
@@ -528,7 +562,7 @@ const VerificationAdmin = () => {
               />
             </div>
           </div>
-
+  
           <div className="rounded-md border">
             <Table>
               <TableHeader className="bg-gray-50">
@@ -576,7 +610,7 @@ const VerificationAdmin = () => {
             </Table>
           </div>
         </div>
-
+  
         <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             {!selectedStudent ? (
@@ -593,13 +627,13 @@ const VerificationAdmin = () => {
                     Review and verify student application details
                   </DialogDescription>
                 </DialogHeader>
-
+  
                 <Tabs defaultValue="details" className="w-full">
                   <TabsList className="grid grid-cols-2 w-full mb-6">
                     <TabsTrigger value="details">Application Details</TabsTrigger>
                     <TabsTrigger value="documents">Documents</TabsTrigger>
                   </TabsList>
-
+  
                   <TabsContent value="details" className="space-y-6">
                     {/* Personal Information Section */}
                     <div className="space-y-4">
@@ -621,7 +655,7 @@ const VerificationAdmin = () => {
                         ))}
                       </div>
                     </div>
-
+  
                     {/* Academic Information Section */}
                     <div className="space-y-4">
                       <h3 className="font-medium text-lg">Academic Information</h3>
@@ -647,12 +681,12 @@ const VerificationAdmin = () => {
                             </p>
                           </div>
                         </div>
-
+  
                         {/* Academic Details */}
                         {['tenth', 'twelfth', 'graduation'].map((level) => {
                           const data = selectedStudent.academic_details?.[level];
                           if (!data) return null;
-
+  
                           return (
                             <div key={level}>
                               <Label className="text-sm text-gray-500 font-medium">
@@ -673,7 +707,7 @@ const VerificationAdmin = () => {
                         })}
                       </div>
                     </div>
-
+  
                     {/* Status History Section */}
                     <div className="space-y-4">
                       <h3 className="font-medium text-lg">Status History</h3>
@@ -710,7 +744,7 @@ const VerificationAdmin = () => {
                         )}
                       </div>
                     </div>
-
+  
                     {/* Verification Section */}
                     <div className="space-y-4">
                       <h3 className="font-medium text-lg">Verification</h3>
@@ -721,9 +755,9 @@ const VerificationAdmin = () => {
                             {getStatusBadge(selectedStudent.status)}
                           </div>
                         </div>
-
+  
                         <DocumentVerificationCheckboxes />
-
+  
                         <div className="mb-6">
                           <Label htmlFor="adminRemarks" className="block text-sm text-gray-500 mb-1">
                             Admin Remarks
@@ -744,35 +778,35 @@ const VerificationAdmin = () => {
                             }
                           />
                         </div>
-
+  
                         <div className="flex flex-col sm:flex-row justify-end gap-4">
-                          <Button
-                            variant="outline"
-                            onClick={() => handleStatusUpdate(selectedStudent.id, "pending")}
-                            className="bg-yellow-50 hover:bg-yellow-100 text-yellow-800 border-yellow-200"
-                            disabled={isUpdating}
-                          >
-                            {isUpdating ? "Processing..." : "Keep Pending"}
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={() => handleStatusUpdate(selectedStudent.id, "rejected")}
-                            disabled={isUpdating}
-                          >
-                            {isUpdating ? "Processing..." : "Reject"}
-                          </Button>
-                          <Button
-                            className="bg-green-600 hover:bg-green-700"
-                            onClick={() => handleStatusUpdate(selectedStudent.id, "approved")}
-                            disabled={isUpdating}
-                          >
-                            {isUpdating ? "Processing..." : "Approve"}
-                          </Button>
+                        <Button
+            variant="outline"
+            onClick={() => handleStatusUpdate("pending")}
+            className="bg-yellow-50 hover:bg-yellow-100 text-yellow-800 border-yellow-200"
+            disabled={isUpdating}
+          >
+            {isUpdating ? "Processing..." : "Keep Pending"}
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => handleStatusUpdate("rejected")}
+            disabled={isUpdating}
+          >
+            {isUpdating ? "Processing..." : "Reject"}
+          </Button>
+          <Button
+            className="bg-green-600 hover:bg-green-700"
+            onClick={() => handleStatusUpdate("approved")}
+            disabled={isUpdating}
+          >
+            {isUpdating ? "Processing..." : "Approve"}
+          </Button>
                         </div>
                       </div>
                     </div>
                   </TabsContent>
-
+  
                   <TabsContent value="documents" className="space-y-4">
                     {documentsLoading ? (
                       <div className="flex justify-center items-center h-40">
