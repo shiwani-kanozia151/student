@@ -14,7 +14,7 @@ interface Student {
   gender?: string;
   status: string;
   created_at: string;
-  admin_remarks?: string;
+  remarks?: string;
   phone?: string;
   personal_details?: any;
   academic_details?: any;
@@ -49,7 +49,7 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
 
       const { data: applicationData, error: appError } = await supabase
         .from('applications')
-        .select('personal_details, academic_details, status, admin_remarks, created_at')
+        .select('personal_details, academic_details, status, remarks, created_at')
         .eq('student_id', studentId)
         .single();
 
@@ -60,7 +60,7 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
         personal_details: applicationData?.personal_details,
         academic_details: applicationData?.academic_details,
         application_status: applicationData?.status || 'pending',
-        application_remarks: applicationData?.admin_remarks,
+        application_remarks: applicationData?.remarks,
         gender: studentData?.gender || applicationData?.personal_details?.sex 
       });
 

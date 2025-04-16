@@ -31,6 +31,9 @@ interface FormData {
   lastName: string;
   sex: string;
   age: string;
+  dob: string; // Added
+  nationality: string; // Added
+  address: string; // Added
   contactNumber: string;
   parentContactNumber: string;
   fatherName: string;
@@ -50,7 +53,8 @@ interface FormData {
   graduationPercentage?: string;
   graduationDegree?: string;
   remarks: string;
-  department: string;
+  course_type: "UG" | "PG" | "Research";
+  course_name: string;
 }
 
 interface UploadedDocument {
@@ -91,6 +95,9 @@ const ApplicationForm = () => {
     lastName: studentName.split(' ').slice(1).join(' ') || '',
     sex: "",
     age: "",
+    dob: "", // Added
+    nationality: "", // Added
+    address: "", // Added
     contactNumber: "",
     parentContactNumber: "",
     fatherName: "",
@@ -110,7 +117,8 @@ const ApplicationForm = () => {
     graduationPercentage: "",
     graduationDegree: "",
     remarks: "",
-    department: courseCategory
+    course_type:courseCategory as "UG" | "PG" | "Research",
+    course_name:"",
   });
 
   React.useEffect(() => {
@@ -170,17 +178,16 @@ const ApplicationForm = () => {
   };
 
   const uploadFile = async (file: File, path: string) => {
+    await supabase.storage.from("applications").remove([path]);
     const { data, error } = await supabase.storage
       .from("applications")
-      .upload(path, file);
+      .upload(path, file, {
+        upsert: true, // Add this option
+        cacheControl: '3600'
+      });
 
-    if (error) throw error;
-
-    const { data: { publicUrl } } = supabase.storage
-      .from("applications")
-      .getPublicUrl(path);
-
-    return publicUrl;
+      if (error) throw error;
+      return supabase.storage.from("applications").getPublicUrl(path).data.publicUrl;
   };
 
   const handleSubmit = async () => {
@@ -189,9 +196,10 @@ const ApplicationForm = () => {
       setError(null);
   
       const requiredFields = [
-        'firstName', 'lastName', 'sex', 'age', 'contactNumber',
+        'firstName', 'lastName', 'sex', 'age', 'dob', 'nationality', 'address','contactNumber',
         'fatherName', 'motherName', 'tenthSchool', 'tenthPercentage',
-        'twelfthSchool', 'twelfthPercentage'
+        'twelfthSchool', 'twelfthPercentage','course_type',
+    'course_name'
       ];
   
       const missingFields = requiredFields.filter(field => !formData[field]);
@@ -205,13 +213,20 @@ const ApplicationForm = () => {
       const { data: application, error: appError } = await supabase
         .from("applications")
         .insert({
+          form_data: {}, // Empty object for required field
+          //remarks: formData.remarks, // Use correct column name
+          course_type: formData.course_type, // Map department to course_type
           student_id: user.id,
           course_id: courseId,
-          department: formData.department,
+          
+          course_name: formData.course_name,
           personal_details: {
             name: fullName,
             sex: formData.sex,
             age: formData.age,
+            dob: formData.dob, // Added
+            nationality: formData.nationality, // Added
+            address: formData.address, // Added
             contact_number: formData.contactNumber,
             parent_contact: formData.parentContactNumber,
             father_name: formData.fatherName,
@@ -282,7 +297,7 @@ const ApplicationForm = () => {
           name: fullName,
           email: user.email,
           phone: formData.contactNumber,
-          department: formData.department,
+          course_type: formData.course_type,
           status: "pending",
           gender: formData.sex,
           updated_at: new Date().toISOString()
@@ -408,35 +423,108 @@ const ApplicationForm = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="sex">Sex *</Label>
-                    <Select
-                      value={formData.sex}
-                      onValueChange={(value) => handleSelectChange("sex", value)}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="male">Male</SelectItem>
-                        <SelectItem value="female">Female</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="age">Age *</Label>
-                    <Input
-                      id="age"
-                      name="age"
-                      type="number"
-                      value={formData.age}
-                      onChange={handleInputChange}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <Label htmlFor="dob">Date of Birth *</Label>
+        <Input
+          id="dob"
+          name="dob"
+          type="date"
+          value={formData.dob}
+          onChange={handleInputChange}
+          className="mt-1"
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="sex">Sex *</Label>
+        <Select
+          value={formData.sex}
+          onValueChange={(value) => handleSelectChange("sex", value)}
+        >
+          <SelectTrigger className="mt-1">
+            <SelectValue placeholder="Select" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="male">Male</SelectItem>
+            <SelectItem value="female">Female</SelectItem>
+            <SelectItem value="other">Other</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label htmlFor="age">Age *</Label>
+        <Input
+          id="age"
+          name="age"
+          type="number"
+          value={formData.age}
+          onChange={handleInputChange}
+          className="mt-1"
+          required
+        />
+      </div>
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <Label htmlFor="nationality">Nationality *</Label>
+        <Input
+          id="nationality"
+          name="nationality"
+          value={formData.nationality}
+          onChange={handleInputChange}
+          className="mt-1"
+          required
+        />
+      </div>
+      
+    </div>
+
+    <div>
+      <Label htmlFor="address">Address *</Label>
+      <Textarea
+        id="address"
+        name="address"
+        value={formData.address}
+        onChange={handleInputChange}
+        className="mt-1"
+        rows={3}
+        required
+      />
+    </div>
+
+                
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <Label htmlFor="course_type">Course Type *</Label>
+      <Select
+        value={formData.course_type}
+        onValueChange={(value) => handleSelectChange("course_type", value as "UG" | "PG" | "Research")}
+      >
+        <SelectTrigger className="mt-1">
+          <SelectValue placeholder="Select course type" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="UG">Undergraduate (UG)</SelectItem>
+          <SelectItem value="PG">Postgraduate (PG)</SelectItem>
+          <SelectItem value="Research">Research</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+    <div>
+      <Label htmlFor="course_name">Course Name *</Label>
+      <Input
+        id="course_name"
+        name="course_name"
+        value={formData.course_name}
+        onChange={handleInputChange}
+        className="mt-1"
+        placeholder="e.g. Computer Science"
+      />
+    </div>
+  </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -757,6 +845,26 @@ const ApplicationForm = () => {
                           {formData.sex} / {formData.age}
                         </p>
                       </div>
+                      <div>
+            <p className="text-sm text-gray-500">Date of Birth</p>
+            <p>{formData.dob || "N/A"}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Nationality</p>
+            <p>{formData.nationality || "N/A"}</p>
+          </div>
+          <div className="col-span-2">
+            <p className="text-sm text-gray-500">Address</p>
+            <p>{formData.address || "N/A"}</p>
+          </div>
+                      <div>
+    <p className="text-sm text-gray-500">Course Type</p>
+    <p>{formData.course_type}</p>
+  </div>
+  <div>
+    <p className="text-sm text-gray-500">Course Name</p>
+    <p>{formData.course_name}</p>
+  </div>
                       <div>
                         <p className="text-sm text-gray-500">Contact Number</p>
                         <p>{formData.contactNumber}</p>
