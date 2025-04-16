@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Eye, RefreshCw } from "lucide-react";
+import { Search, Eye, RefreshCw, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import {
@@ -41,6 +41,14 @@ interface StatusHistoryItem {
   changed_at: string;
   changed_by?: string;
   remarks?: string;
+  document_verification?: {
+    photo: boolean;
+    signature: boolean;
+    caste_certificate: boolean;
+    tenth_marksheet: boolean;
+    twelfth_marksheet: boolean;
+    entrance_scorecard: boolean;
+  };
 }
 
 interface Student {
@@ -64,6 +72,14 @@ interface Student {
   gender?: string | null;
   nationality?: string | null;
   updated_at?: string;
+  document_verification?: {
+    photo: boolean;
+    signature: boolean;
+    caste_certificate: boolean;
+    tenth_marksheet: boolean;
+    twelfth_marksheet: boolean;
+    entrance_scorecard: boolean;
+  };
   personal_details?: {
     father_name?: string;
     mother_name?: string;
@@ -106,6 +122,29 @@ const VerificationAdmin = () => {
   const [adminRemarks, setAdminRemarks] = React.useState("");
   const [documentsLoading, setDocumentsLoading] = React.useState(false);
   const [isUpdating, setIsUpdating] = React.useState(false);
+  const [documentVerification, setDocumentVerification] = React.useState({
+    photo: false,
+    signature: false,
+    caste_certificate: false,
+    tenth_marksheet: false,
+    twelfth_marksheet: false,
+    entrance_scorecard: false,
+  });
+
+  React.useEffect(() => {
+    if (selectedStudent) {
+      setDocumentVerification(
+        selectedStudent.document_verification || {
+          photo: false,
+          signature: false,
+          caste_certificate: false,
+          tenth_marksheet: false,
+          twelfth_marksheet: false,
+          entrance_scorecard: false,
+        }
+      );
+    }
+  }, [selectedStudent]);
 
   const getCourseCategoryLabel = (courseType?: string) => {
     switch(courseType) {
@@ -151,6 +190,7 @@ const VerificationAdmin = () => {
       remarks: typeof student.remarks === 'string' ? student.remarks : null,
       is_verified: typeof student.is_verified === 'boolean' ? student.is_verified : false,
       updated_at: typeof student.updated_at === 'string' ? student.updated_at : undefined,
+      document_verification: student.document_verification || undefined,
       personal_details: student.personal_details || student.applications?.[0]?.personal_details || {},
       academic_details: student.academic_details || student.applications?.[0]?.academic_details || {}
     };
@@ -183,6 +223,7 @@ const VerificationAdmin = () => {
             status,
             remarks,
             status_history,
+            document_verification,
             created_at
           )
         `)
@@ -197,7 +238,8 @@ const VerificationAdmin = () => {
           documents: student.student_documents || [],
           status_history: student.applications?.[0]?.status_history || [],
           status: student.applications?.[0]?.status || student.status,
-          remarks: student.applications?.[0]?.remarks || student.remarks
+          remarks: student.applications?.[0]?.remarks || student.remarks,
+          document_verification: student.applications?.[0]?.document_verification || undefined
         }))
         .filter(Boolean) as Student[];
 
@@ -265,18 +307,19 @@ const VerificationAdmin = () => {
         remarks,
         is_verified: status === "approved",
         updated_at: updateTime,
+        document_verification: status === "approved" ? documentVerification : null,
         status_history: [
           ...(selectedStudent?.status_history || []),
           {
             status,
             changed_at: updateTime,
             remarks: remarks,
-            changed_by: "admin"
+            changed_by: "admin",
+            document_verification: status === "approved" ? documentVerification : null
           }
         ]
       };
 
-      // Update both students and applications tables
       const { error: studentError } = await supabase
         .from("students")
         .update(statusUpdate)
@@ -288,7 +331,8 @@ const VerificationAdmin = () => {
           status,
           remarks,
           status_history: statusUpdate.status_history,
-          updated_at: updateTime
+          updated_at: updateTime,
+          document_verification: statusUpdate.document_verification
         })
         .eq("student_id", studentId);
 
@@ -332,7 +376,8 @@ const VerificationAdmin = () => {
             course_name,
             status,
             remarks,
-            status_history
+            status_history,
+            document_verification
           )
         `)
         .eq("id", studentId)
@@ -350,7 +395,8 @@ const VerificationAdmin = () => {
         documents: studentData.student_documents || [],
         status_history: studentData.applications?.[0]?.status_history || [],
         status: studentData.applications?.[0]?.status || studentData.status,
-        remarks: studentData.applications?.[0]?.remarks || studentData.remarks
+        remarks: studentData.applications?.[0]?.remarks || studentData.remarks,
+        document_verification: studentData.applications?.[0]?.document_verification || undefined
       });
 
       if (!validatedStudent) {
@@ -389,6 +435,46 @@ const VerificationAdmin = () => {
         return <Badge className="bg-yellow-100 text-yellow-800">{status}</Badge>;
     }
   };
+
+  const DocumentVerificationCheckboxes = () => (
+    <div className="mb-6">
+      <Label className="block text-sm text-gray-500 mb-3">Document Verification</Label>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {[
+          { id: 'photo', label: 'Photo' },
+          { id: 'signature', label: 'Signature' },
+          { id: 'caste_certificate', label: 'Caste Certificate' },
+          { id: 'tenth_marksheet', label: '10th Marksheet' },
+          { id: 'twelfth_marksheet', label: '12th Marksheet' },
+          { id: 'entrance_scorecard', label: 'Entrance Scorecard' },
+        ].map((doc) => (
+          <div key={doc.id} className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDocumentVerification(prev => ({
+                  ...prev,
+                  [doc.id]: !prev[doc.id as keyof typeof documentVerification]
+                }));
+              }}
+              className={`h-5 w-5 rounded border flex items-center justify-center ${
+                documentVerification[doc.id as keyof typeof documentVerification]
+                  ? 'bg-blue-600 border-blue-600'
+                  : 'border-gray-300'
+              }`}
+            >
+              {documentVerification[doc.id as keyof typeof documentVerification] && (
+                <Check className="h-3 w-3 text-white" />
+              )}
+            </button>
+            <label className="text-sm text-gray-700">
+              {doc.label}
+            </label>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -635,6 +721,8 @@ const VerificationAdmin = () => {
                             {getStatusBadge(selectedStudent.status)}
                           </div>
                         </div>
+
+                        <DocumentVerificationCheckboxes />
 
                         <div className="mb-6">
                           <Label htmlFor="adminRemarks" className="block text-sm text-gray-500 mb-1">
