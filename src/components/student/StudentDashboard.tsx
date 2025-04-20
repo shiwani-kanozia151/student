@@ -151,18 +151,41 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
     }
   };
 
-  const renderAcademicDetails = (details: any) => {
+  const renderAcademicDetails = (details: any, section?: string) => {
     if (!details) return null;
     
-    return Object.entries(details).map(([key, value]) => (
-      <div key={key}>
-        <h4 className="text-sm font-medium text-gray-500">
-          {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1)}
-        </h4>
-        <p>{String(value) || 'N/A'}</p>
-      </div>
-    ));
+    return Object.entries(details).map(([key, value]) => {
+      const displayKey = key === 'bboard' ? 'board' : key;
+      
+      // Determine the label based on the section
+      let finalKey = displayKey.replace(/_/g, ' ');
+      
+      // Change 'school' to 'university name' for graduation and post_graduation
+      if ((section === 'graduation' || section === 'post_graduation') && key === 'degree') {
+        finalKey = 'university name';
+      }
+
+      //school to college name
+      if ((section === 'graduation' || section === 'post_graduation') && key === 'school') {
+        finalKey = 'college name';
+      }
+      
+      // Change 'percentage' to 'percentage/cgpa' for all sections
+      if (key === 'percentage') {
+        finalKey = 'percentage/cgpa';
+      }
+      
+      return (
+        <div key={key}>
+          <h4 className="text-sm font-medium text-gray-500">
+            {finalKey.charAt(0).toUpperCase() + finalKey.slice(1)}
+          </h4>
+          <p>{String(value) || 'N/A'}</p>
+        </div>
+      );
+    });
   };
+
 
   if (loading) {
     return (
@@ -372,7 +395,7 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
                   {student.course_type === 'PG' ? 'Undergraduate Details' : 'Bachelor\'s Degree Details'}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg">
-                  {renderAcademicDetails(student.academic_details.graduation)}
+                {renderAcademicDetails(student.academic_details.graduation, 'graduation')}
                 </div>
               </div>
             )}
@@ -382,7 +405,8 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
               <div className="mb-6">
                 <h3 className="text-lg font-medium mb-3">Master's Degree Details</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg">
-                  {renderAcademicDetails(student.academic_details.post_graduation)}
+                {renderAcademicDetails(student.academic_details.post_graduation, 'post_graduation')}
+
                 </div>
               </div>
             )}

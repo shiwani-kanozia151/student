@@ -477,6 +477,27 @@ const VerificationAdmin = () => {
 
   const renderAcademicDetails = (student: Student) => {
     if (!student.academic_details) return null;
+     
+    const getDisplayLabel = (key: string, section?: string) => {
+      const displayKey = key === 'bboard' ? 'board' : key;
+      
+      // Change 'percentage' to 'percentage/cgpa' for all sections
+      if (key === 'percentage') {
+        return 'percentage/cgpa';
+      }
+      
+      // Change 'school' to 'college name' for graduation and post-graduation
+      if ((section === 'graduation' || section === 'post_graduation') && key === 'school') {
+        return 'college name';
+      }
+    
+      if ((section === 'graduation' || section === 'post_graduation') && key === 'degree') {
+        return 'university name';
+      }
+      
+      return displayKey.replace(/_/g, ' ');
+    };
+  
 
     return (
       <div className="space-y-4">
@@ -488,7 +509,7 @@ const VerificationAdmin = () => {
               {Object.entries(student.academic_details.tenth).map(([key, value]) => (
                 <div key={`tenth-${key}`}>
                   <Label className="text-sm text-gray-500">
-                    {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ')}
+                    {getDisplayLabel(key).charAt(0).toUpperCase() + getDisplayLabel(key).slice(1)}
                   </Label>
                   <p>{String(value) || "N/A"}</p>
                 </div>
@@ -496,7 +517,7 @@ const VerificationAdmin = () => {
             </div>
           </div>
         )}
-
+  
         {/* 12th Details - Common for all */}
         {student.academic_details.twelfth && (
           <div>
@@ -505,7 +526,7 @@ const VerificationAdmin = () => {
               {Object.entries(student.academic_details.twelfth).map(([key, value]) => (
                 <div key={`twelfth-${key}`}>
                   <Label className="text-sm text-gray-500">
-                    {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ')}
+                    {getDisplayLabel(key).charAt(0).toUpperCase() + getDisplayLabel(key).slice(1)}
                   </Label>
                   <p>{String(value) || "N/A"}</p>
                 </div>
@@ -513,63 +534,47 @@ const VerificationAdmin = () => {
             </div>
           </div>
         )}
-
+  
         {/* UG Details - For PG and Research */}
-        {(student.course_type === 'PG' || student.course_type === 'Research') && student.academic_details.graduation && (
-          <div>
-            <Label className="text-sm text-gray-500 font-medium">
-              {student.course_type === 'PG' ? 'Undergraduate Details' : 'Bachelor\'s Degree Details'}
-            </Label>
-            <div className="grid grid-cols-3 gap-4 mt-2">
-              {Object.entries(student.academic_details.graduation).map(([key, value]) => (
-                <div key={`graduation-${key}`}>
-                  <Label className="text-sm text-gray-500">
-                    {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ')}
-                  </Label>
-                  <p>{String(value) || "N/A"}</p>
-                </div>
-              ))}
-            </div>
+        {student.academic_details.graduation && (
+        <div>
+          <Label className="text-sm text-gray-500 font-medium">
+            {student.course_type === 'PG' ? 'Undergraduate Details' : 'Bachelor\'s Degree Details'}
+          </Label>
+          <div className="grid grid-cols-3 gap-4 mt-2">
+            {Object.entries(student.academic_details.graduation).map(([key, value]) => (
+              <div key={`graduation-${key}`}>
+                <Label className="text-sm text-gray-500">
+                  {getDisplayLabel(key, 'graduation').charAt(0).toUpperCase() + 
+                   getDisplayLabel(key, 'graduation').slice(1)}
+                </Label>
+                <p>{String(value) || "N/A"}</p>
+              </div>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* PG Details - For Research only */}
-        {student.course_type === 'Research' && student.academic_details.post_graduation && (
-          <div>
-            <Label className="text-sm text-gray-500 font-medium">Master's Degree Details</Label>
-            <div className="grid grid-cols-3 gap-4 mt-2">
-              {Object.entries(student.academic_details.post_graduation).map(([key, value]) => (
-                <div key={`postgrad-${key}`}>
-                  <Label className="text-sm text-gray-500">
-                    {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ')}
-                  </Label>
-                  <p>{String(value) || "N/A"}</p>
-                </div>
-              ))}
-            </div>
+      {/* PG Details - Use 'college name' */}
+      {student.academic_details.post_graduation && (
+        <div>
+          <Label className="text-sm text-gray-500 font-medium">Master's Degree Details</Label>
+          <div className="grid grid-cols-3 gap-4 mt-2">
+            {Object.entries(student.academic_details.post_graduation).map(([key, value]) => (
+              <div key={`postgrad-${key}`}>
+                <Label className="text-sm text-gray-500">
+                  {getDisplayLabel(key, 'post_graduation').charAt(0).toUpperCase() + 
+                   getDisplayLabel(key, 'post_graduation').slice(1)}
+                </Label>
+                <p>{String(value) || "N/A"}</p>
+              </div>
+            ))}
           </div>
-        )}
-
-        {/* Entrance Exam - Common for all */}
-        {student.academic_details.entrance && (
-          <div>
-            <Label className="text-sm text-gray-500 font-medium">Entrance Examination Details</Label>
-            <div className="grid grid-cols-3 gap-4 mt-2">
-              {Object.entries(student.academic_details.entrance).map(([key, value]) => (
-                <div key={`entrance-${key}`}>
-                  <Label className="text-sm text-gray-500">
-                    {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ')}
-                  </Label>
-                  <p>{String(value) || "N/A"}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
+        </div>
+      )}
+    </div>
+  );
+};
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 p-6">
