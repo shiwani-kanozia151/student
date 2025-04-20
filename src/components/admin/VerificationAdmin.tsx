@@ -49,6 +49,8 @@ interface StatusHistoryItem {
     tenth_marksheet: boolean;
     twelfth_marksheet: boolean;
     entrance_scorecard: boolean;
+    ug_marksheet?: boolean;
+    pg_marksheet?: boolean;
   };
 }
 
@@ -80,6 +82,8 @@ interface Student {
     tenth_marksheet: boolean;
     twelfth_marksheet: boolean;
     entrance_scorecard: boolean;
+    ug_marksheet?: boolean;
+    pg_marksheet?: boolean;
   };
   personal_details?: {
     father_name?: string;
@@ -135,6 +139,8 @@ const VerificationAdmin = () => {
     tenth_marksheet: false,
     twelfth_marksheet: false,
     entrance_scorecard: false,
+    ug_marksheet: false,
+    pg_marksheet: false,
   });
   const [showEmailSentPopup, setShowEmailSentPopup] = React.useState(false);
   const [emailSentTo, setEmailSentTo] = React.useState("");
@@ -142,16 +148,16 @@ const VerificationAdmin = () => {
 
   React.useEffect(() => {
     if (selectedStudent) {
-      setDocumentVerification(
-        selectedStudent.document_verification || {
-          photo: false,
-          signature: false,
-          caste_certificate: false,
-          tenth_marksheet: false,
-          twelfth_marksheet: false,
-          entrance_scorecard: false,
-        }
-      );
+      setDocumentVerification({
+        photo: selectedStudent.document_verification?.photo || false,
+        signature: selectedStudent.document_verification?.signature || false,
+        caste_certificate: selectedStudent.document_verification?.caste_certificate || false,
+        tenth_marksheet: selectedStudent.document_verification?.tenth_marksheet || false,
+        twelfth_marksheet: selectedStudent.document_verification?.twelfth_marksheet || false,
+        entrance_scorecard: selectedStudent.document_verification?.entrance_scorecard || false,
+        ug_marksheet: selectedStudent.document_verification?.ug_marksheet || false,
+        pg_marksheet: selectedStudent.document_verification?.pg_marksheet || false,
+      });
     }
   }, [selectedStudent]);
 
@@ -435,45 +441,67 @@ const VerificationAdmin = () => {
     }
   };
 
-  const DocumentVerificationCheckboxes = () => (
-    <div className="mb-6">
-      <Label className="block text-sm text-gray-500 mb-3">Document Verification</Label>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {[
-          { id: 'photo', label: 'Photo' },
-          { id: 'signature', label: 'Signature' },
-          { id: 'caste_certificate', label: 'Caste Certificate' },
-          { id: 'tenth_marksheet', label: '10th Marksheet' },
-          { id: 'twelfth_marksheet', label: '12th Marksheet' },
-          { id: 'entrance_scorecard', label: 'Entrance Scorecard' },
-        ].map((doc) => (
-          <div key={doc.id} className="flex items-center space-x-2">
-            <button
-              type="button"
-              onClick={() => {
-                setDocumentVerification(prev => ({
-                  ...prev,
-                  [doc.id]: !prev[doc.id as keyof typeof documentVerification]
-                }));
-              }}
-              className={`h-5 w-5 rounded border flex items-center justify-center ${
-                documentVerification[doc.id as keyof typeof documentVerification]
-                  ? 'bg-blue-600 border-blue-600'
-                  : 'border-gray-300'
-              }`}
-            >
-              {documentVerification[doc.id as keyof typeof documentVerification] && (
-                <Check className="h-3 w-3 text-white" />
-              )}
-            </button>
-            <label className="text-sm text-gray-700">
-              {doc.label}
-            </label>
-          </div>
-        ))}
+  const DocumentVerificationCheckboxes = () => {
+    if (!selectedStudent) return null;
+
+    // Base documents that are always required
+    const baseDocuments = [
+      { id: 'photo', label: 'Photo' },
+      { id: 'signature', label: 'Signature' },
+      { id: 'caste_certificate', label: 'Caste Certificate' },
+      { id: 'tenth_marksheet', label: '10th Marksheet' },
+      { id: 'twelfth_marksheet', label: '12th Marksheet' },
+      { id: 'entrance_scorecard', label: 'Entrance Scorecard' },
+    ];
+
+    // Additional documents based on course type
+    let additionalDocuments = [];
+    
+    if (selectedStudent.course_type === 'PG') {
+      additionalDocuments.push({ id: 'ug_marksheet', label: 'UG Marksheet' });
+    } else if (selectedStudent.course_type === 'Research') {
+      additionalDocuments.push(
+        { id: 'ug_marksheet', label: 'UG Marksheet' },
+        { id: 'pg_marksheet', label: 'PG Marksheet' }
+      );
+    }
+
+    // Combine all documents
+    const allDocuments = [...baseDocuments, ...additionalDocuments];
+
+    return (
+      <div className="mb-6">
+        <Label className="block text-sm text-gray-500 mb-3">Document Verification</Label>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {allDocuments.map((doc) => (
+            <div key={doc.id} className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDocumentVerification(prev => ({
+                    ...prev,
+                    [doc.id]: !prev[doc.id as keyof typeof documentVerification]
+                  }));
+                }}
+                className={`h-5 w-5 rounded border flex items-center justify-center ${
+                  documentVerification[doc.id as keyof typeof documentVerification]
+                    ? 'bg-blue-600 border-blue-600'
+                    : 'border-gray-300'
+                }`}
+              >
+                {documentVerification[doc.id as keyof typeof documentVerification] && (
+                  <Check className="h-3 w-3 text-white" />
+                )}
+              </button>
+              <label className="text-sm text-gray-700">
+                {doc.label}
+              </label>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderAcademicDetails = (student: Student) => {
     if (!student.academic_details) return null;
@@ -575,6 +603,7 @@ const VerificationAdmin = () => {
     </div>
   );
 };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 p-6">
