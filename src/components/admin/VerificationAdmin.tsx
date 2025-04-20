@@ -104,6 +104,11 @@ interface Student {
       percentage?: string;
       degree?: string;
     };
+    post_graduation?: {
+      school?: string;
+      percentage?: string;
+      degree?: string;
+    };
     entrance?: {
       exam?: string;
       score?: string;
@@ -297,7 +302,7 @@ const VerificationAdmin = () => {
   
     try {
       setIsUpdating(true);
-      const remarks = adminRemarks.trim(); // This comes from your state
+      const remarks = adminRemarks.trim();
   
       if ((status === "pending" || status === "rejected") && !remarks) {
         toast.error("Please provide remarks for pending/rejected status");
@@ -306,23 +311,21 @@ const VerificationAdmin = () => {
   
       const updateTime = new Date().toISOString();
       
-      // Update students table - use 'admin_remarks' as the column name but 'remarks' as the value
       const { error: studentError } = await supabase
         .from("students")
         .update({
           status,
-          admin_remarks: remarks, // Column name: admin_remarks, value: remarks
+          admin_remarks: remarks,
           is_verified: status === "approved",
           updated_at: updateTime,
         })
         .eq("id", selectedStudent.id);
   
-      // Update applications table
       const { error: applicationError } = await supabase
         .from("applications")
         .update({
           status,
-          remarks, // applications table uses 'remarks' column
+          remarks,
           updated_at: updateTime,
           ...(status === "approved" && { document_verification: documentVerification }),
         })
@@ -346,7 +349,8 @@ const VerificationAdmin = () => {
       setIsUpdating(false);
     }
   };
-     const viewStudentDetails = async (studentId: string) => {
+
+  const viewStudentDetails = async (studentId: string) => {
     try {
       setDocumentsLoading(true);
       
@@ -471,6 +475,101 @@ const VerificationAdmin = () => {
     </div>
   );
 
+  const renderAcademicDetails = (student: Student) => {
+    if (!student.academic_details) return null;
+
+    return (
+      <div className="space-y-4">
+        {/* 10th Details - Common for all */}
+        {student.academic_details.tenth && (
+          <div>
+            <Label className="text-sm text-gray-500 font-medium">10th Standard Details</Label>
+            <div className="grid grid-cols-3 gap-4 mt-2">
+              {Object.entries(student.academic_details.tenth).map(([key, value]) => (
+                <div key={`tenth-${key}`}>
+                  <Label className="text-sm text-gray-500">
+                    {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ')}
+                  </Label>
+                  <p>{String(value) || "N/A"}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 12th Details - Common for all */}
+        {student.academic_details.twelfth && (
+          <div>
+            <Label className="text-sm text-gray-500 font-medium">12th Standard Details</Label>
+            <div className="grid grid-cols-3 gap-4 mt-2">
+              {Object.entries(student.academic_details.twelfth).map(([key, value]) => (
+                <div key={`twelfth-${key}`}>
+                  <Label className="text-sm text-gray-500">
+                    {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ')}
+                  </Label>
+                  <p>{String(value) || "N/A"}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* UG Details - For PG and Research */}
+        {(student.course_type === 'PG' || student.course_type === 'Research') && student.academic_details.graduation && (
+          <div>
+            <Label className="text-sm text-gray-500 font-medium">
+              {student.course_type === 'PG' ? 'Undergraduate Details' : 'Bachelor\'s Degree Details'}
+            </Label>
+            <div className="grid grid-cols-3 gap-4 mt-2">
+              {Object.entries(student.academic_details.graduation).map(([key, value]) => (
+                <div key={`graduation-${key}`}>
+                  <Label className="text-sm text-gray-500">
+                    {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ')}
+                  </Label>
+                  <p>{String(value) || "N/A"}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* PG Details - For Research only */}
+        {student.course_type === 'Research' && student.academic_details.post_graduation && (
+          <div>
+            <Label className="text-sm text-gray-500 font-medium">Master's Degree Details</Label>
+            <div className="grid grid-cols-3 gap-4 mt-2">
+              {Object.entries(student.academic_details.post_graduation).map(([key, value]) => (
+                <div key={`postgrad-${key}`}>
+                  <Label className="text-sm text-gray-500">
+                    {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ')}
+                  </Label>
+                  <p>{String(value) || "N/A"}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Entrance Exam - Common for all */}
+        {student.academic_details.entrance && (
+          <div>
+            <Label className="text-sm text-gray-500 font-medium">Entrance Examination Details</Label>
+            <div className="grid grid-cols-3 gap-4 mt-2">
+              {Object.entries(student.academic_details.entrance).map(([key, value]) => (
+                <div key={`entrance-${key}`}>
+                  <Label className="text-sm text-gray-500">
+                    {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ')}
+                  </Label>
+                  <p>{String(value) || "N/A"}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 p-6">
@@ -489,45 +588,45 @@ const VerificationAdmin = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
-    {/* Email Sent Popup */}
-    {showEmailSentPopup && (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
-          <div className="flex items-start">
-            <div className="flex-shrink-0 mt-0.5">
-              <Check className="h-6 w-6 text-green-500" />
-            </div>
-            <div className="ml-3">
-              <h3 className="font-bold text-lg mb-1">
-                Status Update Notification Sent
-              </h3>
-              <div className="mt-2">
-                <p className="text-gray-700">
-                  An email has been sent to: <span className="font-semibold">{emailSentTo}</span>
-                </p>
-                <p className="mt-2">
-                  Status: <span className="font-semibold capitalize">{emailStatus}</span>
-                </p>
-                {adminRemarks && (
-                  <div className="mt-3">
-                    <p className="text-sm text-gray-500">Remarks:</p>
-                    <p className="text-gray-700 mt-1">{adminRemarks}</p>
-                  </div>
-                )}
+      {showEmailSentPopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
+            <div className="flex items-start">
+              <div className="flex-shrink-0 mt-0.5">
+                <Check className="h-6 w-6 text-green-500" />
+              </div>
+              <div className="ml-3">
+                <h3 className="font-bold text-lg mb-1">
+                  Status Update Notification Sent
+                </h3>
+                <div className="mt-2">
+                  <p className="text-gray-700">
+                    An email has been sent to: <span className="font-semibold">{emailSentTo}</span>
+                  </p>
+                  <p className="mt-2">
+                    Status: <span className="font-semibold capitalize">{emailStatus}</span>
+                  </p>
+                  {adminRemarks && (
+                    <div className="mt-3">
+                      <p className="text-sm text-gray-500">Remarks:</p>
+                      <p className="text-gray-700 mt-1">{adminRemarks}</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="mt-4 flex justify-end">
-            <Button
-              onClick={() => setShowEmailSentPopup(false)}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              OK
-            </Button>
+            <div className="mt-4 flex justify-end">
+              <Button
+                onClick={() => setShowEmailSentPopup(false)}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                OK
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
+      
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-[#0A2240]">
@@ -642,11 +741,13 @@ const VerificationAdmin = () => {
                         {[
                           { label: "Full Name", value: selectedStudent.name },
                           { label: "Email", value: selectedStudent.email },
-                          { label: "Phone", value: selectedStudent.phone },
-                          { label: "Date of Birth", value: selectedStudent.dob },
-                          { label: "Gender", value: selectedStudent.gender },
-                          { label: "Nationality", value: selectedStudent.nationality },
-                          { label: "Address", value: selectedStudent.address, colSpan: "md:col-span-2" },
+                          { label: "Phone", value: selectedStudent.phone || selectedStudent.personal_details?.contact_number },
+                          { label: "Date of Birth", value: selectedStudent.dob || selectedStudent.personal_details?.dob },
+                          { label: "Gender", value: selectedStudent.gender || selectedStudent.personal_details?.sex },
+                          { label: "Nationality", value: selectedStudent.nationality || selectedStudent.personal_details?.nationality },
+                          { label: "Father's Name", value: selectedStudent.personal_details?.father_name },
+                          { label: "Mother's Name", value: selectedStudent.personal_details?.mother_name },
+                          { label: "Address", value: selectedStudent.address || selectedStudent.personal_details?.address, colSpan: "md:col-span-2" },
                         ].map((field, index) => (
                           <div key={index} className={field.colSpan || ""}>
                             <Label className="text-sm text-gray-500">{field.label}</Label>
@@ -682,29 +783,8 @@ const VerificationAdmin = () => {
                           </div>
                         </div>
   
-                        {/* Academic Details */}
-                        {['tenth', 'twelfth', 'graduation'].map((level) => {
-                          const data = selectedStudent.academic_details?.[level];
-                          if (!data) return null;
-  
-                          return (
-                            <div key={level}>
-                              <Label className="text-sm text-gray-500 font-medium">
-                                {level.charAt(0).toUpperCase() + level.slice(1)} Details
-                              </Label>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-                                {Object.entries(data).map(([key, value]) => (
-                                  <div key={key}>
-                                    <Label className="text-sm text-gray-500">
-                                      {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ')}
-                                    </Label>
-                                    <p>{String(value) || "N/A"}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {/* Dynamic Academic Details */}
+                        {renderAcademicDetails(selectedStudent)}
                       </div>
                     </div>
   
@@ -780,28 +860,28 @@ const VerificationAdmin = () => {
                         </div>
   
                         <div className="flex flex-col sm:flex-row justify-end gap-4">
-                        <Button
-            variant="outline"
-            onClick={() => handleStatusUpdate("pending")}
-            className="bg-yellow-50 hover:bg-yellow-100 text-yellow-800 border-yellow-200"
-            disabled={isUpdating}
-          >
-            {isUpdating ? "Processing..." : "Keep Pending"}
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => handleStatusUpdate("rejected")}
-            disabled={isUpdating}
-          >
-            {isUpdating ? "Processing..." : "Reject"}
-          </Button>
-          <Button
-            className="bg-green-600 hover:bg-green-700"
-            onClick={() => handleStatusUpdate("approved")}
-            disabled={isUpdating}
-          >
-            {isUpdating ? "Processing..." : "Approve"}
-          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleStatusUpdate("pending")}
+                            className="bg-yellow-50 hover:bg-yellow-100 text-yellow-800 border-yellow-200"
+                            disabled={isUpdating}
+                          >
+                            {isUpdating ? "Processing..." : "Keep Pending"}
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={() => handleStatusUpdate("rejected")}
+                            disabled={isUpdating}
+                          >
+                            {isUpdating ? "Processing..." : "Reject"}
+                          </Button>
+                          <Button
+                            className="bg-green-600 hover:bg-green-700"
+                            onClick={() => handleStatusUpdate("approved")}
+                            disabled={isUpdating}
+                          >
+                            {isUpdating ? "Processing..." : "Approve"}
+                          </Button>
                         </div>
                       </div>
                     </div>

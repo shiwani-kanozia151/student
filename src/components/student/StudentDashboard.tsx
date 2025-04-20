@@ -6,6 +6,7 @@ import { signOut } from "@/lib/auth";
 import { toast } from "sonner";
 import { useReactToPrint } from "react-to-print";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 
 interface StatusHistoryItem {
   status: string;
@@ -25,11 +26,18 @@ interface Student {
   remarks?: string;
   phone?: string;
   personal_details?: any;
-  academic_details?: any;
+  academic_details?: {
+    tenth?: Record<string, any>;
+    twelfth?: Record<string, any>;
+    graduation?: Record<string, any>;
+    post_graduation?: Record<string, any>;
+    entrance?: Record<string, any>;
+  };
   application_status?: string;
   application_remarks?: string;
   status_history?: StatusHistoryItem[];
   updated_at?: string;
+  course_type?: "UG" | "PG" | "Research";
 }
 
 const StudentDashboard = ({ studentId }: { studentId?: string }) => {
@@ -49,7 +57,7 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
         studentId = user.id;
       }
 
-      // Fetch student data
+      // Fetch student data with course_type
       const { data: studentData, error: studentError } = await supabase
         .from('students')
         .select('*')
@@ -58,7 +66,7 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
 
       if (studentError) throw studentError;
 
-      // Fetch application data
+      // Fetch application data with academic_details
       const { data: applicationData, error: appError } = await supabase
         .from('applications')
         .select('*')
@@ -75,7 +83,8 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
         academic_details: applicationData?.academic_details || {},
         application_status: applicationData?.status || 'pending',
         application_remarks: applicationData?.remarks,
-        status_history: applicationData?.status_history || []
+        status_history: applicationData?.status_history || [],
+        course_type: applicationData?.course_type
       });
 
     } catch (err) {
@@ -142,6 +151,19 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
     }
   };
 
+  const renderAcademicDetails = (details: any) => {
+    if (!details) return null;
+    
+    return Object.entries(details).map(([key, value]) => (
+      <div key={key}>
+        <h4 className="text-sm font-medium text-gray-500">
+          {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1)}
+        </h4>
+        <p>{String(value) || 'N/A'}</p>
+      </div>
+    ));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 p-6">
@@ -193,9 +215,14 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
           <h1 className="text-2xl font-bold text-[#0A2240]">
             Student Dashboard
           </h1>
-          <Button variant="outline" onClick={handleLogout}>
-            Logout
-          </Button>
+          <div className="flex items-center gap-4">
+            <Badge variant="outline" className="capitalize">
+              {student.course_type || 'N/A'}
+            </Badge>
+            <Button variant="outline" onClick={handleLogout}>
+              Logout
+            </Button>
+          </div>
         </div>
 
         {/* Status Cards */}
@@ -206,8 +233,8 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
-                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(student.application_status)}`}>
-                  {student.application_status?.toUpperCase()}
+                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(student.application_status || 'pending')}`}>
+                  {(student.application_status || 'pending').toUpperCase()}
                 </span>
                 <span className="text-xs text-gray-500">
                   {student.updated_at ? new Date(student.updated_at).toLocaleString() : 'N/A'}
@@ -277,9 +304,16 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
         {/* Printable Content */}
         <div ref={printRef} className="bg-white p-6 rounded-lg shadow-sm">
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold text-[#0A2240]">
-              Application Details
-            </h1>
+            <div>
+              <h1 className="text-2xl font-bold text-[#0A2240]">
+                Application Details
+              </h1>
+              {student.course_type && (
+                <p className="text-sm text-gray-500 mt-1">
+                  Course Type: <span className="font-medium capitalize">{student.course_type}</span>
+                </p>
+              )}
+            </div>
             <p className="text-sm text-gray-500">
               Submitted: {new Date(student.created_at).toLocaleDateString()}
             </p>
@@ -310,36 +344,68 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
           {/* Academic Information */}
           <div className="print-section mb-8">
             <h2 className="text-xl font-semibold border-b pb-2 mb-4">Academic Information</h2>
-            {['tenth', 'twelfth', 'graduation'].map((level) => {
-              const data = getNestedValue(student, `academic_details.${level}`);
-              if (data === 'Not provided') return null;
-
-              return (
-                <div key={level} className="mb-6">
-                  <h3 className="text-lg font-medium mb-3">
-                    {level.charAt(0).toUpperCase() + level.slice(1)} Details
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg">
-                    {Object.entries(data || {}).map(([key, value]) => (
-                      <div key={key}>
-                        <h4 className="text-sm font-medium text-gray-500">
-                          {key.charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1)}
-                        </h4>
-                        <p>{String(value) || 'N/A'}</p>
-                      </div>
-                    ))}
-                  </div>
+            
+            {/* 10th Details (All students) */}
+            {student.academic_details?.tenth && (
+              <div className="mb-6">
+                <h3 className="text-lg font-medium mb-3">10th Standard Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg">
+                  {renderAcademicDetails(student.academic_details.tenth)}
                 </div>
-              );
-            })}
+              </div>
+            )}
+
+            {/* 12th Details (All students except maybe some UG) */}
+            {student.academic_details?.twelfth && (
+              <div className="mb-6">
+                <h3 className="text-lg font-medium mb-3">12th Standard Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg">
+                  {renderAcademicDetails(student.academic_details.twelfth)}
+                </div>
+              </div>
+            )}
+
+            {/* UG Details (PG and Research students) */}
+            {(student.course_type === 'PG' || student.course_type === 'Research') && student.academic_details?.graduation && (
+              <div className="mb-6">
+                <h3 className="text-lg font-medium mb-3">
+                  {student.course_type === 'PG' ? 'Undergraduate Details' : 'Bachelor\'s Degree Details'}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg">
+                  {renderAcademicDetails(student.academic_details.graduation)}
+                </div>
+              </div>
+            )}
+
+            {/* PG Details (Research students only) */}
+            {student.course_type === 'Research' && student.academic_details?.post_graduation && (
+              <div className="mb-6">
+                <h3 className="text-lg font-medium mb-3">Master's Degree Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg">
+                  {renderAcademicDetails(student.academic_details.post_graduation)}
+                </div>
+              </div>
+            )}
+
+            {/* Entrance Exam Details */}
+            {student.academic_details?.entrance && (
+              <div className="mb-6">
+                <h3 className="text-lg font-medium mb-3">
+                  {student.course_type === 'Research' ? 'Research Entrance Exam' : 'Entrance Exam'} Details
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg">
+                  {renderAcademicDetails(student.academic_details.entrance)}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Application Status */}
           <div className="print-section">
             <h2 className="text-xl font-semibold border-b pb-2 mb-4">Application Status</h2>
             <div className="flex items-center gap-4">
-              <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(student.application_status)}`}>
-                {student.application_status?.toUpperCase()}
+              <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(student.application_status || 'pending')}`}>
+                {(student.application_status || 'pending').toUpperCase()}
               </span>
               {student.application_remarks && (
                 <p className="text-sm">
@@ -351,9 +417,9 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
         </div>
 
         <div className="mt-6 flex justify-end no-print">
-        <Button onClick={() => handlePrint()}>
-           Download Application
-           </Button>
+          <Button onClick={() => handlePrint()}>
+            Download Application
+          </Button>
         </div>
       </div>
     </div>
