@@ -7,7 +7,31 @@ import AdministrationEditor from "./content/AdministrationEditor";
 
 import CourseEditor from "./content/CourseEditor";
 import NavbarEditor from "./content/NavbarEditor";
+import CourseEditorManager from "./content/CourseEditorManager";
 import { supabase } from "@/lib/supabase";
+
+// Add type declarations for the component props
+interface NewsEditorProps {
+  initialNews: any[];
+}
+
+interface AcademicEditorProps {
+  initialContent: any[];
+}
+
+interface AboutUsEditorProps {
+  initialContent: any;
+}
+
+interface NavbarEditorProps {
+  initialNavItems: any;
+}
+
+// Type cast the imported components
+const TypedNewsEditor = NewsEditor as React.ComponentType<NewsEditorProps>;
+const TypedAcademicEditor = AcademicEditor as React.ComponentType<AcademicEditorProps>;
+const TypedAboutUsEditor = AboutUsEditor as React.ComponentType<AboutUsEditorProps>;
+const TypedNavbarEditor = NavbarEditor as React.ComponentType<NavbarEditorProps>;
 
 const ContentAdmin = () => {
   const [loading, setLoading] = React.useState(true);
@@ -76,29 +100,30 @@ const ContentAdmin = () => {
         )}
 
         <Tabs defaultValue="about" className="w-full">
-          <TabsList className="grid grid-cols-2 lg:grid-cols-6 w-full mb-6">
+          <TabsList className="grid grid-cols-2 lg:grid-cols-7 w-full mb-6">
             <TabsTrigger value="about">About Us</TabsTrigger>
             <TabsTrigger value="news">News</TabsTrigger>
             <TabsTrigger value="academic">Academic</TabsTrigger>
             <TabsTrigger value="administration">Administration</TabsTrigger>
             <TabsTrigger value="courses">Courses</TabsTrigger>
+            <TabsTrigger value="course-editors">Course Editors</TabsTrigger>
             <TabsTrigger value="navbar">Navigation</TabsTrigger>
           </TabsList>
 
           <TabsContent value="about" className="mt-0">
-            <AboutUsEditor
+            <TypedAboutUsEditor
               initialContent={data.content.find((c) => c.type === "about")}
             />
           </TabsContent>
 
           <TabsContent value="news" className="mt-0">
-            <NewsEditor
+            <TypedNewsEditor
               initialNews={data.content.filter((c) => c.type === "news")}
             />
           </TabsContent>
 
           <TabsContent value="academic" className="mt-0">
-            <AcademicEditor
+            <TypedAcademicEditor
               initialContent={data.content.filter((c) => c.type === "academic")}
             />
           </TabsContent>
@@ -110,9 +135,13 @@ const ContentAdmin = () => {
           <TabsContent value="courses" className="mt-0">
             <CourseEditor initialCourses={data.courses} />
           </TabsContent>
+          
+          <TabsContent value="course-editors" className="mt-0">
+            <CourseEditorManager />
+          </TabsContent>
 
           <TabsContent value="navbar" className="mt-0">
-            <NavbarEditor
+            <TypedNavbarEditor
               initialNavItems={
                 data.content.find((c) => c.type === "navbar")?.content
               }

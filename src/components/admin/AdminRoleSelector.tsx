@@ -2,9 +2,8 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 
 interface AdminRoleSelectorProps {
-  onRoleSelect: (role: "content" | "verification") => void;
+  onRoleSelect: (role: "content" | "verification") => void; // Removed "course"
 }
-
 const AdminRoleSelector = ({ onRoleSelect }: AdminRoleSelectorProps) => {
   const adminEmail = localStorage.getItem("adminEmail");
   const adminRole = localStorage.getItem("adminRole");
@@ -34,6 +33,7 @@ const AdminRoleSelector = ({ onRoleSelect }: AdminRoleSelectorProps) => {
           >
             Verification Administrator
           </Button>
+          {/* Course Administrator button removed */}
         </div>
       </div>
     </div>

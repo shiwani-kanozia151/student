@@ -104,6 +104,70 @@ export interface Database {
             department: string;
           };
         };
+        courses: {
+          Row: {
+            id: string;
+            name: string;
+            type: string;
+            description: string;
+            duration: string;
+            curriculum: string[] | null;
+            eligibility: string | null;
+            is_active: boolean;
+            created_at: string;
+          };
+          Insert: {
+            id?: string;
+            name: string;
+            type: string;
+            description?: string;
+            duration?: string;
+            curriculum?: string[] | null;
+            eligibility?: string | null;
+            is_active?: boolean;
+            created_at?: string;
+          };
+          Update: {
+            id?: string;
+            name?: string;
+            type?: string;
+            description?: string;
+            duration?: string;
+            curriculum?: string[] | null;
+            eligibility?: string | null;
+            is_active?: boolean;
+            created_at?: string;
+          };
+        };
+        course_editors: {
+          Row: {
+            id: string;
+            email: string;
+            password_hash: string;
+            course_id: string;
+            course_name: string;
+            created_at: string;
+            last_login: string | null;
+          };
+          Insert: {
+            id?: string;
+            email: string;
+            password_hash: string;
+            course_id: string;
+            course_name: string;
+            created_at?: string;
+            last_login?: string | null;
+          };
+          Update: {
+            id?: string;
+            email?: string;
+            password_hash?: string;
+            course_id?: string;
+            course_name?: string;
+            created_at?: string;
+            last_login?: string | null;
+          };
+        };
       };
     };
   }
@@ -113,6 +177,8 @@ export interface Database {
   export type ApplicationInsert = Database['public']['Tables']['applications']['Insert'];
   export type ApplicationUpdate = Database['public']['Tables']['applications']['Update'];
   export type Student = Database['public']['Tables']['students']['Row'];
+  export type Course = Database['public']['Tables']['courses']['Row'];
+  export type CourseEditor = Database['public']['Tables']['course_editors']['Row'];
   export type ApplicationDocument = {
     type: string;
     url: string;

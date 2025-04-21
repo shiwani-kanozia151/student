@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,10 @@ interface AdministrationSection {
   title: string;
   content: string;
 }
+
+// The administration content is stored with type "academic" due to database constraints
+const ADMIN_CONTENT_TYPE = "academic";
+const ADMIN_CONTENT_TITLE = "Administration Content";
 
 const AdministrationEditor = () => {
   const [sections, setSections] = React.useState<AdministrationSection[]>([
@@ -31,9 +35,44 @@ const AdministrationEditor = () => {
         "The Institute encourages public participation and guidance through members representing them in the NIT Council and the Board",
     },
   ]);
-
+  
+  const [loading, setLoading] = React.useState(true);
   const [newTitle, setNewTitle] = React.useState("");
   const [newContent, setNewContent] = React.useState("");
+
+  // Load administration content on initial render
+  useEffect(() => {
+    async function loadAdminContent() {
+      try {
+        setLoading(true);
+        // First look for content with title "Administration Content"
+        const { data, error } = await supabase
+          .from("content")
+          .select("*")
+          .eq("type", ADMIN_CONTENT_TYPE)
+          .eq("title", ADMIN_CONTENT_TITLE)
+          .single();
+        
+        if (error && error.code !== 'PGRST116') {
+          // If error is not "no rows returned", then it's a real error
+          console.error("Error loading administration content:", error);
+          return;
+        }
+        
+        if (data && data.content) {
+          console.log("Loaded administration content:", data);
+          // Use the saved content if available
+          setSections(data.content);
+        }
+      } catch (err) {
+        console.error("Failed to load administration content:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    loadAdminContent();
+  }, []);
 
   const handleAddSection = () => {
     if (!newTitle || !newContent) return;
@@ -57,25 +96,32 @@ const AdministrationEditor = () => {
 
   const handleSave = async () => {
     try {
-      // Save changes to backend
+      // The database constraint only allows: 'about', 'news', 'academic'
       const { error } = await supabase.from("content").upsert([
         {
-          type: "administration",
-          title: "Administration Content",
+          type: ADMIN_CONTENT_TYPE, // Using an allowed type from the constraint
+          title: ADMIN_CONTENT_TITLE,
           content: sections,
         },
       ]);
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       // Force a refresh to show updated content
       alert("Administration content updated successfully!");
-      window.location.reload();
+      // Don't reload the page, it will cause the data to be lost
+      // window.location.reload();
     } catch (err) {
       console.error("Error saving administration content:", err);
       alert(`Error saving content: ${err.message}`);
     }
   };
+
+  if (loading) {
+    return <div>Loading administration content...</div>;
+  }
 
   return (
     <div className="space-y-6 bg-white p-6 rounded-lg shadow-md">

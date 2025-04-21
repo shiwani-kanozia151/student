@@ -10,6 +10,9 @@ import StudentDashboard from "./components/student/StudentDashboard";
 import CourseSelection from "./components/student/CourseSelection";
 import ApplicationForm from "./components/student/ApplicationForm";
 import routes from "tempo-routes";
+// Import the course editor pages
+import CourseEditorLogin from "./pages/course-editor-login";
+import CourseEditorDashboard from "./pages/course-editor-dashboard";
 
 const AboutUs = lazy(() => import("./components/about/AboutUs"));
 const Administration = lazy(
@@ -95,6 +98,10 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* Course Editor Routes */}
+        <Route path="/course-editor-login" element={<CourseEditorLogin />} />
+        <Route path="/course-editor-dashboard" element={<CourseEditorDashboard />} />
 
         {/* Tempo Routes */}
         {import.meta.env.VITE_TEMPO && <Route path="/tempobook/*" />}

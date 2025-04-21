@@ -29,6 +29,13 @@ const adminUsers: AdminUser[] = [
     name: "Verification Officer",
     password: "verify123",
   },
+
+  {
+    email: "course@nitt.edu",
+    role: "course",
+    name: "Course Editor",
+    password: "course123",
+  },
 ];
 
 export const validateAdminCredentials = (

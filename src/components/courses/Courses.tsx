@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { ChevronDown, ChevronUp } from "lucide-react";
-
+import { Button } from "@/components/ui/button";
 type CourseType = "btech" | "ug_btech" | "bsc_bed" | "mtech" | "mca" | "ma" | "msc" | "mba" | "phd" | "ms_research" | string;
 
 interface Course {
@@ -13,7 +13,14 @@ interface Course {
   curriculum?: string[];
   eligibility?: string;
   is_active?: boolean;
+  content_admin?: string; // Add this line
 }
+
+
+const adminRole = localStorage.getItem("adminRole");
+const isSuperAdmin = adminRole === "super";
+const isContentAdmin = adminRole === "content";
+const isCourseAdmin = adminRole === "course";
 
 const Courses = () => {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -256,8 +263,12 @@ const Courses = () => {
   );
 };
 
-const CourseCard = ({ course, expanded, onToggle }: { course: Course, expanded: boolean, onToggle: () => void }) => (
-  <div className="border rounded-lg overflow-hidden shadow-sm">
+const CourseCard = ({ course, expanded, onToggle }: { course: Course, expanded: boolean, onToggle: () => void }) => {
+  const canEdit = isSuperAdmin || isContentAdmin || 
+                 (isCourseAdmin && course.content_admin === localStorage.getItem("adminId"));
+
+  return (
+    <div className="border rounded-lg overflow-hidden shadow-sm">
     <div 
       className="p-4 cursor-pointer flex justify-between items-center bg-gray-50 hover:bg-gray-100"
       onClick={onToggle}
@@ -296,7 +307,15 @@ const CourseCard = ({ course, expanded, onToggle }: { course: Course, expanded: 
         )}
       </div>
     )}
-  </div>
+    {expanded && canEdit && (
+        <div className="p-4 border-t flex justify-end space-x-2">
+          <Button variant="outline" size="sm">Edit</Button>
+          <Button variant="destructive" size="sm">Delete</Button>
+        </div>
+      )}
+  </div>              
+  
 );
+};
 
 export default Courses;
