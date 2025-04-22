@@ -5,6 +5,7 @@ import AdminLogin from "./components/auth/AdminLogin";
 import AdminRoleSelector from "./components/admin/AdminRoleSelector";
 import ContentAdmin from "./components/admin/ContentAdmin";
 import VerificationAdmin from "./components/admin/VerificationAdmin";
+import VerificationOfficerDashboard from "@/components/admin/VerificationOfficerDashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
 import StudentDashboard from "./components/student/StudentDashboard";
 import CourseSelection from "./components/student/CourseSelection";
@@ -13,6 +14,8 @@ import routes from "tempo-routes";
 // Import the course editor pages
 import CourseEditorLogin from "./pages/course-editor-login";
 import CourseEditorDashboard from "./pages/course-editor-dashboard";
+import VerificationAdminManager from "./components/admin/verification/VerificationAdminManager";
+import VerificationOfficerLogin from "./components/auth/VerificationOfficerLogin";
 
 const AboutUs = lazy(() => import("./components/about/AboutUs"));
 const Administration = lazy(
@@ -62,6 +65,14 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/admin/verification-management"
+          element={
+            <ProtectedRoute requiredRole="super">
+              <VerificationAdminManager />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Content Admin Routes */}
         <Route
@@ -81,7 +92,7 @@ function App() {
           }
         />
 
-        {/* Verification Admin Routes */}
+        {/* Verification Admin Routes (for super admins using verification role) */}
         <Route
           path="/verification-admin"
           element={<Navigate to="/verification-admin/login" />}
@@ -98,6 +109,10 @@ function App() {
             </ProtectedRoute>
           }
         />
+        
+        {/* Verification Officer Routes (for course-specific verification officers) */}
+        <Route path="/verification-officer/login" element={<VerificationOfficerLogin />} />
+        <Route path="/verification-officer/dashboard" element={<VerificationOfficerDashboard />} />
 
         {/* Course Editor Routes */}
         <Route path="/course-editor-login" element={<CourseEditorLogin />} />

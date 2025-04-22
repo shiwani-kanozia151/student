@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useReactToPrint } from "react-to-print";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { RefreshCw } from "lucide-react";
 
 interface StatusHistoryItem {
   status: string;
@@ -43,12 +44,13 @@ interface Student {
 const StudentDashboard = ({ studentId }: { studentId?: string }) => {
   const [student, setStudent] = React.useState<Student | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const printRef = React.useRef<HTMLDivElement>(null);
 
-  const fetchStudentData = async () => {
+  const fetchStudentData = async (showToast = false) => {
     try {
-      setLoading(true);
+      showToast ? setRefreshing(true) : setLoading(true);
       setError(null);
 
       if (!studentId) {
@@ -56,6 +58,8 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
         if (!user) throw new Error("Not authenticated");
         studentId = user.id;
       }
+
+      console.log(`Fetching data for student: ${studentId}`);
 
       // Fetch student data with course_type
       const { data: studentData, error: studentError } = await supabase
@@ -65,6 +69,7 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
         .single();
 
       if (studentError) throw studentError;
+      console.log("Student data received:", studentData);
 
       // Fetch application data with academic_details
       const { data: applicationData, error: appError } = await supabase
@@ -76,16 +81,23 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
         .single();
 
       if (appError) throw appError;
+      console.log("Application data received:", applicationData);
 
-      setStudent({
+      const updatedStudent = {
         ...studentData,
         personal_details: applicationData?.personal_details || {},
         academic_details: applicationData?.academic_details || {},
-        application_status: applicationData?.status || 'pending',
-        application_remarks: applicationData?.remarks,
+        // Use both sources for status, prioritizing application status
+        application_status: applicationData?.status || studentData?.status || 'pending',
+        application_remarks: applicationData?.remarks || studentData?.admin_remarks,
         status_history: applicationData?.status_history || [],
         course_type: applicationData?.course_type
-      });
+      };
+      
+      console.log("Setting student state:", updatedStudent);
+      setStudent(updatedStudent);
+      
+      if (showToast) toast.success("Data refreshed successfully");
 
     } catch (err) {
       console.error("Error fetching data:", err);
@@ -93,15 +105,31 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
       toast.error("Failed to load your application data");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  // Create properly typed event handlers
+  const handleRetry = (e: React.MouseEvent<HTMLButtonElement>) => {
+    fetchStudentData();
+  };
+  
+  const handleStatusRefresh = (e: React.MouseEvent<HTMLButtonElement>) => {
+    fetchStudentData(true);
   };
 
   // Set up real-time subscriptions
   React.useEffect(() => {
     fetchStudentData();
+    
+    // Generate unique channel IDs to avoid conflicts
+    const appChannelId = `student_app_updates_${Math.random().toString(36).substring(2, 9)}`;
+    const studentChannelId = `student_data_updates_${Math.random().toString(36).substring(2, 9)}`;
+    
+    console.log(`Setting up real-time channels: ${appChannelId}, ${studentChannelId}`);
 
     const channel = supabase
-      .channel('student_updates')
+      .channel(appChannelId)
       .on(
         'postgres_changes',
         {
@@ -111,16 +139,41 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
           filter: `student_id=eq.${studentId}`
         },
         (payload) => {
-          console.log('Change received!', payload);
+          console.log('Application change received!', payload);
+          fetchStudentData();
+        }
+      )
+      .subscribe();
+      
+    // Add subscription to students table as well
+    const studentsChannel = supabase
+      .channel(studentChannelId)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'students',
+          filter: `id=eq.${studentId}`
+        },
+        (payload) => {
+          console.log('Student record changed!', payload);
           fetchStudentData();
         }
       )
       .subscribe();
 
     return () => {
+      console.log("Cleaning up real-time subscriptions");
       supabase.removeChannel(channel);
+      supabase.removeChannel(studentsChannel);
     };
   }, [studentId]);
+
+  // Manual refresh function with correct event type
+  const handleManualRefresh = (e: React.MouseEvent<HTMLButtonElement>) => {
+    fetchStudentData(true);
+  };
 
   const handleLogout = async () => {
     await signOut();
@@ -220,7 +273,7 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
           <CardContent>
             <p className="mb-4">{error || "Student record not found"}</p>
             <div className="flex space-x-2">
-              <Button onClick={fetchStudentData}>Retry</Button>
+              <Button onClick={handleRetry}>Retry</Button>
               <Button variant="outline" onClick={handleLogout}>
                 Logout
               </Button>
@@ -239,6 +292,16 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
             Student Dashboard
           </h1>
           <div className="flex items-center gap-4">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleManualRefresh} 
+              disabled={refreshing || loading}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
             <Badge variant="outline" className="capitalize">
               {student.course_type || 'N/A'}
             </Badge>
@@ -262,6 +325,16 @@ const StudentDashboard = ({ studentId }: { studentId?: string }) => {
                 <span className="text-xs text-gray-500">
                   {student.updated_at ? new Date(student.updated_at).toLocaleString() : 'N/A'}
                 </span>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="ml-auto h-8 w-8 p-0" 
+                  onClick={handleStatusRefresh}
+                  disabled={refreshing}
+                >
+                  <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                  <span className="sr-only">Refresh Status</span>
+                </Button>
               </div>
             </CardContent>
           </Card>

@@ -47,55 +47,32 @@ export default function CourseEditorDashboard() {
         // Log the Supabase URL to ensure we're connecting to the right project
         console.log("Using Supabase URL:", import.meta.env.VITE_SUPABASE_URL);
         
-        // First check if the course exists using exact match
-        const { data: courseData, error: courseError } = await supabase
+        // Get all courses and find the match - handles different ID formats better
+        const { data: allCourses, error: courseError } = await supabase
           .from("courses")
-          .select("*")
-          .eq("id", editorSession.courseId);
+          .select("*");
           
         if (courseError) {
           console.error("Database error:", courseError);
           throw new Error(`Database error: ${courseError.message}`);
         }
         
-        console.log("First query result:", courseData);
+        console.log("All courses query result:", allCourses?.length || 0, "courses found");
         
-        if (!courseData || courseData.length === 0) {
-          // Try with a different format (string-based comparison)
-          const { data: secondAttemptData, error: secondError } = await supabase
-            .from("courses")
-            .select("*");
-            
-          if (secondError) {
-            console.error("Second attempt error:", secondError);
-            throw secondError;
-          }
-          
-          console.log("All courses:", secondAttemptData);
-          
-          // Manually filter to find matching course
-          const matchingCourse = secondAttemptData?.find(
-            course => String(course.id).trim() === String(editorSession.courseId).trim()
-          );
-          
-          if (matchingCourse) {
-            console.log("Course found on second attempt:", matchingCourse);
-            const processedCourse = {
-              ...matchingCourse,
-              curriculum: Array.isArray(matchingCourse.curriculum) 
-                ? matchingCourse.curriculum 
-                : []
-            };
-            
-            setCourseData(processedCourse);
-            return;
-          }
+        // Try to find the course with exact match or string comparison
+        const matchingCourse = allCourses?.find(course => 
+          course.id === editorSession.courseId || 
+          String(course.id).trim() === String(editorSession.courseId).trim()
+        );
+        
+        if (!matchingCourse) {
+          console.error("No matching course found for ID:", editorSession.courseId);
           
           // Log all course IDs for debugging
-          const courseIds = secondAttemptData?.map(c => ({
+          const courseIds = allCourses?.map(c => ({
             id: c.id,
-            type: typeof c.id,
-            matches: String(c.id) === String(editorSession.courseId)
+            name: c.name,
+            type: typeof c.id
           }));
           
           setDebugInfo({
@@ -103,7 +80,7 @@ export default function CourseEditorDashboard() {
             courseIdType: typeof editorSession.courseId,
             message: "No course found with this ID",
             sessionData: editorSession,
-            allCourses: secondAttemptData?.slice(0, 5), // Show first 5 courses for debugging
+            allCourses: allCourses?.slice(0, 5), // Show first 5 courses for debugging
             courseIdComparisons: courseIds
           });
           
@@ -112,9 +89,9 @@ export default function CourseEditorDashboard() {
         
         // Ensure curriculum is always an array
         const processedCourse = {
-          ...courseData[0],
-          curriculum: Array.isArray(courseData[0].curriculum) 
-            ? courseData[0].curriculum 
+          ...matchingCourse,
+          curriculum: Array.isArray(matchingCourse.curriculum) 
+            ? matchingCourse.curriculum 
             : []
         };
         
