@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { sendStatusEmail } from "@/lib/emailService";
+import { useNavigate } from 'react-router-dom';
 
 // Copy relevant interfaces from VerificationAdmin.tsx
 interface Document {
@@ -151,35 +152,20 @@ const VerificationOfficerDashboard = () => {
     courseId: "",
     courseName: ""
   });
+  const navigate = useNavigate();
 
   // Get the verification officer's information on component mount
   useEffect(() => {
-    const email = localStorage.getItem("verificationOfficerEmail");
-    const courseId = localStorage.getItem("verificationOfficerCourseId");
-    const courseName = localStorage.getItem("verificationOfficerCourseName");
-    
-    if (!email || !courseId) {
-      // Redirect to login if not authenticated
-      window.location.href = "/verification-officer/login";
-      return;
-    }
-    
-    setOfficerInfo({
-      email: email || "",
-      courseId: courseId || "",
-      courseName: courseName || ""
-    });
-    
-    // We'll fetch students after the state is updated
-  }, []);
-
-  // Add a new useEffect that depends on officerInfo to fetch students
-  useEffect(() => {
-    // Only fetch students when we have the officer info (specifically email)
-    if (officerInfo.email) {
-      fetchStudents();
-    }
-  }, [officerInfo]);
+    (async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) {
+        // not logged in, send them to login
+        return navigate('/verification-officer/login');
+      }
+      // user.id is the officer's UID, so RLS will filter assignments to this ID
+      fetchStudents();  
+    })();
+  }, [navigate]);
 
   // Handler to update document verification state
   useEffect(() => {
@@ -252,45 +238,29 @@ const VerificationOfficerDashboard = () => {
       setLoading(true);
       setError(null);
       
-      // Make sure we have the officer's email before proceeding
-      const officerEmail = officerInfo.email;
-      if (!officerEmail) {
-        setError("Verification officer email not found. Please log in again.");
-        setLoading(false);
-        return;
-      }
-      
-      // Get the verification officer ID
-      const { data: officerData, error: officerError } = await supabase
-        .from("verification_admins")
-        .select("id")
-        .eq("email", officerEmail)
-        .single();
-
-      if (officerError) {
-        throw new Error(`Failed to get verification officer details: ${officerError.message}`);
-      }
-      
-      if (!officerData || !officerData.id) {
-        throw new Error("Verification officer ID not found");
-      }
-
       // Get assigned students for this officer
       const { data: assignedStudents, error: assignmentError } = await supabase
         .from("student_assignments")
         .select("student_id")
-        .eq("verification_officer_id", officerData.id)
         .eq("course_id", officerInfo.courseId);
 
       if (assignmentError && !assignmentError.message.includes("does not exist")) {
         throw new Error(`Error fetching student assignments: ${assignmentError.message}`);
       }
 
-      // Create an array of student IDs assigned to this officer
+      // Generate list of assigned student IDs
       const assignedStudentIds = (assignedStudents || []).map(assignment => assignment.student_id);
-      
-      let query = supabase
-        .from("students")
+
+      // Always fetch only the assigned students
+      if (!assignedStudentIds.length) {
+        console.log('No students assigned to this officer.');
+        setStudents([]);
+        setLoading(false);
+        return;
+      }
+
+      const { data: studentsData, error: studentsError } = await supabase
+        .from('students')
         .select(`
           *,
           student_documents!student_id(
@@ -315,50 +285,30 @@ const VerificationOfficerDashboard = () => {
             created_at
           )
         `)
-        .eq("applications.course_id", officerInfo.courseId)
-        .order("created_at", { ascending: false });
+        .in('id', assignedStudentIds)
+        .order('created_at', { ascending: false });
 
-      // If we have assigned students, only get those specific students
-      if (assignedStudents && assignedStudents.length > 0) {
-        console.log(`Filtering for ${assignedStudentIds.length} assigned students`);
-        query = query.in("id", assignedStudentIds);
+      if (studentsError) {
+        throw studentsError;
       }
 
-      const { data: studentsData, error: studentsError } = await query;
+      console.log(`Retrieved ${studentsData?.length || 0} assigned student records`);
+      console.log('Sample student data:', studentsData?.[0] || 'No data');
 
-      if (studentsError) throw studentsError;
-
-      // Filter out any students with incomplete data
+      // Process and validate the assigned students
       const validatedStudents = (studentsData || [])
-        .map(student => {
-          // Get application for this student
-          const application = student.applications?.[0];
-          
-          // Skip students with no application or course details
-          if (!application || !application.course_id || !application.course_name) {
-            console.log("Skipping student with incomplete course data:", student.id);
-            return null;
-          }
-
-          // Only include students from the officer's course
-          if (application.course_id !== officerInfo.courseId) {
-            console.log("Skipping student from different course:", application.course_id);
-            return null;
-          }
-          
-          return validateStudent({
-            ...student,
-            ...(application.personal_details || {}),
-            documents: student.student_documents || [],
-            status_history: application.status_history || [],
-            status: application.status || student.status,
-            remarks: application.remarks || student.remarks,
-            document_verification: application.document_verification || undefined
-          });
-        })
+        .map(student => validateStudent({
+          ...student,
+          ...(student.applications?.[0]?.personal_details || {}),
+          documents: student.student_documents || [],
+          status_history: student.applications?.[0]?.status_history || [],
+          status: student.applications?.[0]?.status || student.status,
+          remarks: student.applications?.[0]?.remarks || student.remarks,
+          document_verification: student.applications?.[0]?.document_verification || undefined,
+        }))
         .filter(Boolean) as Student[];
 
-      console.log(`Filtered to ${validatedStudents.length} valid students`);
+      console.log(`Filtered to ${validatedStudents.length} valid assigned students`);
       setStudents(validatedStudents);
     } catch (err) {
       console.error("Error fetching students:", err);
