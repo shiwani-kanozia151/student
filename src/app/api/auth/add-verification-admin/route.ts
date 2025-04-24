@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,124 +7,94 @@ export async function POST(request: NextRequest) {
     const { email, password, course_id, course_name } = await request.json();
 
     // Validate required fields
-    if (!email || !password || !course_id) {
+    if (!email || !password || !course_id || !course_name) {
       return NextResponse.json(
-        { error: 'Missing required fields (email, password, course_id)' },
+        { error: 'Missing required fields (email, password, course_id, course_name)' },
         { status: 400 }
       );
     }
 
-    // Get Supabase credentials from request cookies or headers
-    const supabaseUrl = request.cookies.get('supabaseUrl')?.value || 
-                        request.headers.get('X-Supabase-URL') || 
-                        process.env.NEXT_PUBLIC_SUPABASE_URL;
+    // Initialize Supabase client with environment variables
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
     
-    const supabaseKey = request.cookies.get('supabaseKey')?.value || 
-                       request.headers.get('X-Supabase-Key') || 
-                       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
+    if (!supabaseUrl || !supabaseServiceKey) {
       return NextResponse.json(
-        { error: 'Missing Supabase credentials' },
-        { status: 400 }
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    // Check if the verification_admins table exists, create it if it doesn't
-    await createTableIfNotExists(supabase);
-    
-    // Check if admin with this email already exists for this course
-    const { data: existingAdmin } = await supabase
-      .from('verification_admins')
-      .select('id')
-      .eq('email', email)
-      .eq('course_id', course_id)
-      .single();
-    
-    if (existingAdmin) {
-      return NextResponse.json(
-        { error: 'Verification admin already exists for this course' },
-        { status: 409 }
-      );
-    }
-
-    // Hash the password
-    const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-    const passwordHash = `${salt}:${hash}`;
-
-    // Add new verification admin
-    const { data, error } = await supabase
-      .from('verification_admins')
-      .insert([
-        {
-          email,
-          password_hash: passwordHash,
-          course_id,
-          course_name: course_name || null,
-          created_at: new Date().toISOString()
-        }
-      ])
-      .select();
-
-    if (error) {
-      return NextResponse.json(
-        { error: 'Error adding verification admin: ' + error.message },
+        { error: 'Server configuration error' },
         { status: 500 }
       );
     }
 
-    // Return success response with the created admin (excluding password hash)
-    const admin = data[0];
-    return NextResponse.json(
-      {
-        id: admin.id,
-        email: admin.email,
-        course_id: admin.course_id,
-        course_name: admin.course_name,
-        created_at: admin.created_at
-      },
-      { status: 201 }
-    );
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
+    // Check if admin with this email already exists
+    const { data: existingAdmin, error: checkError } = await supabase
+      .from('verification_admins')
+      .select('id')
+      .eq('email', email)
+      .single();
+    
+    if (checkError && !checkError.message.includes('No rows found')) {
+      console.error('Error checking existing admin:', checkError);
+      return NextResponse.json(
+        { error: 'Error checking existing user' },
+        { status: 500 }
+      );
+    }
+
+    if (existingAdmin) {
+      return NextResponse.json(
+        { error: 'A verification officer with this email already exists' },
+        { status: 409 }
+      );
+    }
+
+    // First create auth user
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+
+    if (authError) {
+      console.error('Error creating auth user:', authError);
+      return NextResponse.json(
+        { error: 'Failed to create user account' },
+        { status: 500 }
+      );
+    }
+
+    // Then create verification admin record
+    const { data: adminData, error: adminError } = await supabase
+      .from('verification_admins')
+      .insert([
+        {
+          id: authData.user.id,
+          email,
+          course_id,
+          course_name,
+          created_at: new Date().toISOString()
+        }
+      ])
+      .select()
+      .single();
+
+    if (adminError) {
+      console.error('Error creating verification admin:', adminError);
+      // Clean up auth user if admin creation fails
+      await supabase.auth.admin.deleteUser(authData.user.id);
+      return NextResponse.json(
+        { error: 'Failed to create verification admin record' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(adminData, { status: 201 });
   } catch (error: any) {
-    console.error('Error adding verification admin:', error);
+    console.error('Error in add-verification-admin:', error);
     return NextResponse.json(
-      { error: 'Server error: ' + error.message },
+      { error: error.message || 'Internal server error' },
       { status: 500 }
     );
-  }
-}
-
-// Function to create the verification_admins table if it doesn't exist
-async function createTableIfNotExists(supabase: any) {
-  try {
-    // Try to select from the table to check if it exists
-    await supabase.from('verification_admins').select('id').limit(1);
-  } catch (error: any) {
-    // If the table doesn't exist, create it
-    if (error.message.includes('relation "verification_admins" does not exist')) {
-      const createTableSQL = `
-        CREATE TABLE IF NOT EXISTS verification_admins (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          email TEXT NOT NULL,
-          password_hash TEXT NOT NULL,
-          course_id TEXT NOT NULL,
-          course_name TEXT,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          last_login TIMESTAMP WITH TIME ZONE,
-          UNIQUE(email, course_id)
-        );
-        CREATE INDEX IF NOT EXISTS verification_admins_email_idx ON verification_admins(email);
-        CREATE INDEX IF NOT EXISTS verification_admins_course_id_idx ON verification_admins(course_id);
-      `;
-      
-      await supabase.rpc('exec', { query: createTableSQL });
-    } else {
-      // If it's a different error, throw it
-      throw error;
-    }
   }
 } 

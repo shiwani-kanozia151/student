@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, Upload, Check, X } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from '@/lib/auth';
 
 interface FormData {
   firstName: string;
@@ -83,7 +84,7 @@ const ApplicationForm = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState(false);
   const [studentName, setStudentName] = React.useState("");
-  const [user, setUser] = React.useState<any>(null);
+  const { user } = useAuth();
 
   const isUG = courseType === "ug";
   const isPG = courseType === "pg";
@@ -112,39 +113,39 @@ const ApplicationForm = () => {
   });
 
   const [formData, setFormData] = React.useState<FormData>({
-    firstName: studentName.split(' ')[0] || '',
+    firstName: '',
     middleName: '',
-    lastName: studentName.split(' ').slice(1).join(' ') || '',
-    sex: "",
-    age: "",
-    dob: "",
-    nationality: "",
-    address: "",
-    contactNumber: "",
-    parentContactNumber: "",
-    fatherName: "",
-    motherName: "",
-    fatherOccupation: "",
-    motherOccupation: "",
-    tenthSchool: "",
-    tenthPercentage: "",
-    tenthBoard: "",
-    twelfthSchool: "",
-    twelfthPercentage: "",
-    twelfthBoard: "",
-    entranceExam: "",
-    entranceScore: "",
-    entranceRank: "",
-    graduationSchool: "",
-    graduationPercentage: "",
-    graduationDegree: "",
-    pgSchool: "",
-    pgPercentage: "",
-    pgDegree: "",
-    researchProposal: "",
-    remarks: "",
+    lastName: '',
+    sex: '',
+    age: '',
+    dob: '',
+    nationality: '',
+    address: '',
+    contactNumber: '',
+    parentContactNumber: '',
+    fatherName: '',
+    motherName: '',
+    fatherOccupation: '',
+    motherOccupation: '',
+    tenthSchool: '',
+    tenthPercentage: '',
+    tenthBoard: '',
+    twelfthSchool: '',
+    twelfthPercentage: '',
+    twelfthBoard: '',
+    entranceExam: '',
+    entranceScore: '',
+    entranceRank: '',
+    graduationSchool: '',
+    graduationPercentage: '',
+    graduationDegree: '',
+    pgSchool: '',
+    pgPercentage: '',
+    pgDegree: '',
+    researchProposal: '',
+    remarks: '',
     course_type: courseType.toUpperCase() as "UG" | "PG" | "Research",
-    course_name: courseName,
+    course_name: courseName || ''
   });
 
 
@@ -152,7 +153,6 @@ const ApplicationForm = () => {
     const fetchUser = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        setUser(user);
         
         if (user) {
           const { data: profile } = await supabase
@@ -217,149 +217,99 @@ const ApplicationForm = () => {
       return supabase.storage.from("applications").getPublicUrl(path).data.publicUrl;
   };
 
-  const handleSubmit = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-  
-      // Common required fields
-      const requiredFields = [
-        'firstName', 'lastName', 'sex', 'age', 'dob', 'nationality', 'address',
-        'contactNumber', 'fatherName', 'motherName', 'tenthSchool', 'tenthPercentage',
-        'course_type', 'course_name'
-      ];
-
-      if (isUG) {
-        requiredFields.push('twelfthSchool', 'twelfthPercentage');
-      }
-      if (isPG) {
-        requiredFields.push('twelfthSchool', 'twelfthPercentage', 'graduationSchool', 'graduationPercentage');
-      }
-      if (isResearch) {
-        requiredFields.push(
-          'twelfthSchool', 'twelfthPercentage',
-          'graduationSchool', 'graduationPercentage',
-          'pgSchool', 'pgPercentage'
-        );
-      }
-  
-      const missingFields = requiredFields.filter(field => !formData[field]);
-      if (missingFields.length > 0) {
-        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
-      }
-
-      const missingDocuments = Object.entries(documents)
-      .filter(([_, doc]) => doc.file === null)
-      .map(([key, _]) => key);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     
-       if (missingDocuments.length > 0) {
-         throw new Error(`Missing required documents: ${missingDocuments.join(', ')}`);
-        }
+    try {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
 
-      // Create application payload
-      const fullName = `${formData.firstName} ${formData.middleName} ${formData.lastName}`.replace(/\s+/g, ' ').trim();
-      
-      const applicationPayload = {
-        form_data: {},
-        course_type: formData.course_type,
+      // Structure the data properly
+      const applicationData = {
         student_id: user.id,
         course_id: courseId,
+        course_type: formData.course_type,
         course_name: formData.course_name,
+        status: 'pending',
+        form_data: {}, // Add empty form_data object
         personal_details: {
-          name: fullName,
-          sex: formData.sex,
+          name: `${formData.firstName} ${formData.middleName} ${formData.lastName}`.trim(),
+          gender: formData.sex,
           age: formData.age,
           dob: formData.dob,
           nationality: formData.nationality,
           address: formData.address,
-          contact_number: formData.contactNumber,
+          phone: formData.contactNumber,
           parent_contact: formData.parentContactNumber,
           father_name: formData.fatherName,
           mother_name: formData.motherName,
           father_occupation: formData.fatherOccupation,
-          mother_occupation: formData.motherOccupation,
+          mother_occupation: formData.motherOccupation
         },
         academic_details: {
           tenth: {
             school: formData.tenthSchool,
             percentage: formData.tenthPercentage,
-            board: formData.tenthBoard,
+            board: formData.tenthBoard
           },
-          ...(isUG || isPG || isResearch ? {
-            twelfth: {
-              school: formData.twelfthSchool,
-              percentage: formData.twelfthPercentage,
-              board: formData.twelfthBoard,
-            }
-          } : {}),
-          ...(isPG || isResearch ? {
-            graduation: {
-              school: formData.graduationSchool,
-              percentage: formData.graduationPercentage,
-              degree: formData.graduationDegree,
-            }
-          } : {}),
-          ...(isResearch ? {
-            post_graduation: {
-              school: formData.pgSchool,
-              percentage: formData.pgPercentage,
-              degree: formData.pgDegree,
-            }
-          } : {}),
+          twelfth: {
+            school: formData.twelfthSchool,
+            percentage: formData.twelfthPercentage,
+            board: formData.twelfthBoard
+          },
           entrance: {
             exam: formData.entranceExam,
             score: formData.entranceScore,
-            rank: formData.entranceRank,
+            rank: formData.entranceRank
           },
-          ...(isResearch ? {
-            research_proposal: formData.researchProposal
-          } : {})
+          ...(formData.course_type !== "UG" && {
+            graduation: {
+              school: formData.graduationSchool,
+              percentage: formData.graduationPercentage,
+              university: formData.graduationDegree
+            }
+          }),
+          ...(formData.course_type === "Research" && {
+            post_graduation: {
+              school: formData.pgSchool,
+              percentage: formData.pgPercentage,
+              university: formData.pgDegree
+            }
+          })
         },
-        status: "pending",
-        remarks: formData.remarks
+        remarks: formData.remarks,
+        submitted_at: new Date().toISOString()
       };
 
-      // Submit to Supabase
-      const { data: application, error: appError } = await supabase
-        .from("applications")
-        .insert(applicationPayload)
-        .select()
-        .single();
+      console.log('Submitting application data:', applicationData);
 
-      if (appError) throw appError;
+      // Create the application
+      const { data, error } = await supabase
+        .from('applications')
+        .insert(applicationData)
+        .select();
 
-      // Upload documents
-      await Promise.all(
-        Object.entries(documents)
-          .filter(([_, doc]) => doc.file)
-          .map(async ([key, doc]) => {
-            const path = `documents/${user.id}/${courseId}/${key}/${doc.file!.name}`;
-            const url = await uploadFile(doc.file!, path);
-            
-            await supabase
-              .from('student_documents')
-              .upsert({
-                student_id: user.id,
-                application_id: application.id,
-                type: doc.type,
-                url,
-                name: doc.file!.name,
-                uploaded_at: new Date().toISOString()
-              });
-          })
-      );
+      if (error) {
+        throw error;
+      }
 
+      console.log('Application submitted successfully:', data);
+
+      // Show success message
+      toast.success('Application submitted successfully!');
       setSuccess(true);
-      toast.success("Application submitted successfully!");
-      setTimeout(() => navigate("/student/dashboard"), 2000);
-    } catch (err: any) {
-      console.error("Submission error:", err);
-      setError(err.message || "Failed to submit application. Please try again.");
-      toast.error(err.message || "Submission failed");
-    } finally {
-      setLoading(false);
+      
+      // Redirect to student dashboard
+      navigate('/student/dashboard');
+      
+    } catch (error: any) {
+      console.error('Error submitting application:', error);
+      setError(error.message || 'Failed to submit application');
+      toast.error(error.message || 'Failed to submit application');
     }
   };
+
   const nextTab = () => {
     if (activeTab === "personal") setActiveTab("academic");
     else if (activeTab === "academic") setActiveTab("documents");

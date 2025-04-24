@@ -31,5 +31,19 @@ export default defineConfig({
   server: {
     // @ts-ignore
     allowedHosts: true,
+    proxy: {
+      '/api/auth/add-verification-admin': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/api/auth/create-verification-admin': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/api/admin/assign-students': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      }
+    }
   }
 });

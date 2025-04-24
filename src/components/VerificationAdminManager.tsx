@@ -318,14 +318,13 @@ export default function VerificationAdminManager() {
         autoHideDuration={6000}
         onClose={() => setNotification(null)}
       >
-        {notification && (
-          <Alert 
-            onClose={() => setNotification(null)} 
-            severity={notification.type}
-          >
-            {notification.message}
-          </Alert>
-        )}
+        <Alert 
+          onClose={() => setNotification(null)} 
+          severity={notification?.type || 'info'}
+          sx={{ display: notification ? 'flex' : 'none' }}
+        >
+          {notification?.message || ''}
+        </Alert>
       </Snackbar>
     </Container>
   );

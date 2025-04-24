@@ -28,12 +28,11 @@ const AdminLogin = ({ adminType }: AdminLoginProps) => {
 
     const user = validateAdminCredentials(email, password);
     if (user) {
-      
-      const userRole = user.role as AdminRole; // Type assertion
+      const userRole = user.role as AdminRole;
       
       if (adminType === "super" && userRole === "super") {
         localStorage.setItem("adminEmail", email);
-        localStorage.setItem("adminRole", user.role);
+        localStorage.setItem("adminRole", "super");
         navigate("/admin/select-role");
       } else if (
         adminType === "content" &&
@@ -46,8 +45,21 @@ const AdminLogin = ({ adminType }: AdminLoginProps) => {
         adminType === "verification" &&
         (userRole === "verification" || userRole === "super")
       ) {
+        // Clear any existing verification-related data
+        localStorage.removeItem('selectedCourseId');
+        localStorage.removeItem('selectedCourseName');
+        localStorage.removeItem('verificationOfficerEmail');
+        localStorage.removeItem('verificationOfficerCourseId');
+        localStorage.removeItem('verificationOfficerCourseName');
+        
+        // Set new verification admin data
         localStorage.setItem("adminEmail", email);
-        localStorage.setItem("adminRole", "verification");
+        // If super admin is accessing verification admin, keep their super role
+        localStorage.setItem("adminRole", userRole);
+        localStorage.setItem("isVerificationAdmin", "true");
+        localStorage.setItem("isSuperAdminAsVerification", userRole === "super" ? "true" : "false");
+        localStorage.setItem("originalRole", userRole); // Store original role
+        
         navigate("/verification-admin/dashboard");
       } else {
         setError("You don't have permission to access this area");

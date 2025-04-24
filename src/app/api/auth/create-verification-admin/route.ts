@@ -1,13 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
+
+// Specify the runtime
+export const runtime = 'nodejs';
+
+// Initialize Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error('Missing Supabase environment variables');
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+});
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, course_id, course_name } = await request.json();
+    // Parse request body
+    const body = await request.json();
+    const { email, password, course_id, course_name } = body;
 
-    // Validate required fields
+    // Validate input
     if (!email || !password || !course_id || !course_name) {
       return NextResponse.json(
         { error: 'Missing required fields' },
@@ -15,82 +33,67 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get Supabase credentials from request cookies or headers
-    const supabaseUrl = request.cookies.get('supabaseUrl')?.value || 
-                        request.headers.get('X-Supabase-URL') || 
-                        process.env.NEXT_PUBLIC_SUPABASE_URL;
-    
-    const supabaseKey = request.cookies.get('supabaseKey')?.value || 
-                       request.headers.get('X-Supabase-Key') || 
-                       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    // First, create the auth user
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
 
-    if (!supabaseUrl || !supabaseKey) {
+    if (authError) {
+      console.error('Error creating auth user:', authError);
       return NextResponse.json(
-        { error: 'Missing Supabase credentials' },
-        { status: 400 }
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Check if email already exists
-    const { data: existingAdmin, error: checkError } = await supabase
-      .from('verification_admins')
-      .select('id')
-      .eq('email', email)
-      .maybeSingle();
-
-    if (checkError) {
-      return NextResponse.json(
-        { error: 'Error checking for existing admin: ' + checkError.message },
+        { error: 'Failed to create user account: ' + authError.message },
         { status: 500 }
       );
     }
 
-    if (existingAdmin) {
+    if (!authData?.user?.id) {
       return NextResponse.json(
-        { error: 'An admin with this email already exists' },
-        { status: 409 }
+        { error: 'Failed to create user account: No user ID returned' },
+        { status: 500 }
       );
     }
 
-    // Hash the password
-    const saltRounds = 10;
-    const password_hash = await bcrypt.hash(password, saltRounds);
-
-    // Create the verification admin
-    const newAdmin = {
-      id: uuidv4(),
-      email,
-      password_hash,
-      course_id,
-      course_name,
-      created_at: new Date().toISOString(),
-      last_login: null
-    };
-
-    const { data, error } = await supabase
+    // Then create the verification admin record
+    const { data: adminData, error: adminError } = await supabase
       .from('verification_admins')
-      .insert(newAdmin)
+      .insert([
+        {
+          id: authData.user.id,
+          email,
+          password_text: password,
+          course_id,
+          course_name,
+          created_at: new Date().toISOString(),
+        }
+      ])
       .select()
       .single();
 
-    if (error) {
+    if (adminError) {
+      // Clean up auth user if admin creation fails
+      await supabase.auth.admin.deleteUser(authData.user.id);
+      console.error('Error creating verification admin:', adminError);
       return NextResponse.json(
-        { error: 'Error creating verification admin: ' + error.message },
+        { error: 'Failed to create verification admin: ' + adminError.message },
         { status: 500 }
       );
     }
 
-    // Return the newly created admin (excluding the password hash)
-    const { password_hash: _, ...safeAdminData } = data;
-    
-    return NextResponse.json(safeAdminData, { status: 201 });
-    
+    // Return success response
+    return NextResponse.json({
+      success: true,
+      data: adminData
+    }, { status: 201 });
+
   } catch (error: any) {
-    console.error('Error creating verification admin:', error);
+    console.error('Error in create-verification-admin:', error);
     return NextResponse.json(
-      { error: 'Server error: ' + error.message },
+      { 
+        error: 'Internal server error: ' + (error.message || 'Unknown error'),
+        details: error.stack
+      },
       { status: 500 }
     );
   }

@@ -6,14 +6,28 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { toast, Toaster } from "sonner";
 
+interface EditorSession {
+  courseId: string;
+  email: string;
+}
+
+interface Course {
+  id: string;
+  name: string;
+  description: string;
+  duration: string;
+  eligibility: string;
+  curriculum: string[];
+}
+
 export default function CourseEditorDashboard() {
   const navigate = useNavigate();
-  const [courseData, setCourseData] = useState(null);
+  const [courseData, setCourseData] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [editorSession, setEditorSession] = useState(null);
-  const [debugInfo, setDebugInfo] = useState(null);
+  const [editorSession, setEditorSession] = useState<EditorSession | null>(null);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
   
   // Check authentication
   useEffect(() => {
@@ -24,7 +38,7 @@ export default function CourseEditorDashboard() {
     }
     
     try {
-      const parsedSession = JSON.parse(session);
+      const parsedSession = JSON.parse(session) as EditorSession;
       console.log("Editor session:", parsedSession);
       setEditorSession(parsedSession);
     } catch (err) {
@@ -35,9 +49,11 @@ export default function CourseEditorDashboard() {
   
   // Fetch course data
   useEffect(() => {
-    if (!editorSession) return;
+    if (!editorSession?.courseId) return;
     
     async function fetchCourse() {
+      if (!editorSession?.courseId) return; // Additional safety check
+      
       try {
         setLoading(true);
         setError("");
@@ -64,50 +80,39 @@ export default function CourseEditorDashboard() {
           course.id === editorSession.courseId || 
           String(course.id).trim() === String(editorSession.courseId).trim()
         );
-        
-        if (!matchingCourse) {
-          console.error("No matching course found for ID:", editorSession.courseId);
-          
-          // Log all course IDs for debugging
-          const courseIds = allCourses?.map(c => ({
-            id: c.id,
-            name: c.name,
-            type: typeof c.id
-          }));
-          
-          setDebugInfo({
-            courseId: editorSession.courseId,
-            courseIdType: typeof editorSession.courseId,
-            message: "No course found with this ID",
-            sessionData: editorSession,
-            allCourses: allCourses?.slice(0, 5), // Show first 5 courses for debugging
-            courseIdComparisons: courseIds
+
+        if (!matchingCourse || !matchingCourse.id) {
+          setDebugInfo({ 
+            searchedId: editorSession.courseId,
+            availableCourses: allCourses?.map(c => ({ id: c.id, name: c.name }))
           });
-          
-          throw new Error("Course not found");
+          throw new Error("Course not found or invalid course data");
         }
-        
-        // Ensure curriculum is always an array
-        const processedCourse = {
-          ...matchingCourse,
+
+        // Since we've checked for required fields above, we can safely create a Course object
+        const courseWithCurriculum: Course = {
+          id: matchingCourse.id,
+          name: matchingCourse.name,
+          description: matchingCourse.description ?? "",
+          duration: matchingCourse.duration ?? "",
+          eligibility: matchingCourse.eligibility ?? "",
           curriculum: Array.isArray(matchingCourse.curriculum) 
             ? matchingCourse.curriculum 
             : []
         };
-        
-        console.log("Course data found:", processedCourse);
-        setCourseData(processedCourse);
+
+        setCourseData(courseWithCurriculum);
+        setLoading(false);
         
       } catch (err) {
-        console.error("Failed to load course data:", err);
-        setError(err.message || "Failed to load course data");
-      } finally {
+        console.error("Error fetching course:", err);
+        setError(err instanceof Error ? err.message : "Unknown error occurred");
         setLoading(false);
       }
     }
-    
+
     fetchCourse();
-  }, [editorSession]);
+  }, [editorSession?.courseId]);
   
   // Handle logout
   const handleLogout = () => {
@@ -116,81 +121,30 @@ export default function CourseEditorDashboard() {
   };
   
   // Handle save changes
-  const handleSaveChanges = async () => {
+  const handleSave = async () => {
+    if (!courseData?.id) {
+      toast.error("No course data to save");
+      return;
+    }
+
     try {
       setSaving(true);
-      setError("");
-      
-      // Validate that required fields exist
-      if (!courseData.name || !courseData.id) {
-        throw new Error("Course name is required");
-      }
-      
-      // Ensure that we have processed values for all fields
-      const updatedCourse = {
-        name: courseData.name,
-        description: courseData.description || "",
-        duration: courseData.duration || "",
-        eligibility: courseData.eligibility || "",
-        // Make sure curriculum is an array
-        curriculum: Array.isArray(courseData.curriculum) ? courseData.curriculum : []
-      };
-      
-      console.log("Saving course changes:", updatedCourse);
-      
       const { error } = await supabase
         .from("courses")
-        .update(updatedCourse)
+        .update({
+          name: courseData.name,
+          description: courseData.description,
+          duration: courseData.duration,
+          eligibility: courseData.eligibility,
+          curriculum: courseData.curriculum
+        })
         .eq("id", courseData.id);
-        
-      if (error) {
-        console.error("Save error:", error);
-        throw new Error(`Failed to save: ${error.message}`);
-      }
-      
-      // Show a more prominent success message with fallback alert
-      toast.success("Course updated successfully!", {
-        duration: 4000,
-        position: "top-center",
-        style: {
-          background: "#10B981",
-          color: "white",
-          fontSize: "16px",
-          padding: "16px",
-          borderRadius: "8px",
-        },
-      });
-      
-      // Fallback alert in case toast doesn't appear
-      alert("Course updated successfully!");
-      
-      // Refresh the data after save
-      const { data: refreshedData } = await supabase
-        .from("courses")
-        .select("*")
-        .eq("id", courseData.id)
-        .single();
-        
-      if (refreshedData) {
-        setCourseData({
-          ...refreshedData,
-          curriculum: Array.isArray(refreshedData.curriculum) 
-            ? refreshedData.curriculum 
-            : []
-        });
-      }
-    } catch (err) {
-      console.error("Error saving changes:", err);
-      setError(err.message || "Failed to save changes");
-      
-      // Show error with fallback alert
-      toast.error(err.message || "Failed to save changes", {
-        duration: 4000,
-        position: "top-center",
-      });
-      
-      // Fallback alert
-      alert(err.message || "Failed to save changes");
+
+      if (error) throw error;
+      toast.success("Changes saved successfully");
+    } catch (error) {
+      console.error("Error saving course:", error);
+      toast.error("Failed to save changes");
     } finally {
       setSaving(false);
     }
@@ -200,20 +154,30 @@ export default function CourseEditorDashboard() {
   const [newCurriculumItem, setNewCurriculumItem] = useState("");
   
   const handleAddCurriculumItem = () => {
-    if (!newCurriculumItem.trim()) return;
+    if (!newCurriculumItem.trim() || !courseData) return;
     
     setCourseData({
-      ...courseData,
-      curriculum: [...(courseData.curriculum || []), newCurriculumItem]
+      id: courseData.id,
+      name: courseData.name,
+      description: courseData.description,
+      duration: courseData.duration,
+      eligibility: courseData.eligibility,
+      curriculum: [...courseData.curriculum, newCurriculumItem]
     });
     
     setNewCurriculumItem("");
   };
   
   // Handle curriculum item remove
-  const handleRemoveCurriculumItem = (index) => {
+  const handleRemoveCurriculumItem = (index: number) => {
+    if (!courseData) return;
+
     setCourseData({
-      ...courseData,
+      id: courseData.id,
+      name: courseData.name,
+      description: courseData.description,
+      duration: courseData.duration,
+      eligibility: courseData.eligibility,
       curriculum: courseData.curriculum.filter((_, i) => i !== index)
     });
   };
@@ -435,7 +399,7 @@ export default function CourseEditorDashboard() {
           </div>
           
           <Button 
-            onClick={handleSaveChanges} 
+            onClick={handleSave} 
             className="w-full" 
             disabled={saving}
           >

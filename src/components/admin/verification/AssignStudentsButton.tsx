@@ -28,7 +28,7 @@ const AssignStudentsButton: React.FC<AssignStudentsButtonProps> = ({ courseId, c
       setError(null);
       setSuccess(null);
 
-      // 1. Create table if needed (old logic) and fetch officers
+      // 1. Fetch all verification officers for this course
       const { data: officers, error: officersError } = await supabase
         .from('verification_admins')
         .select('id, email')
@@ -36,14 +36,19 @@ const AssignStudentsButton: React.FC<AssignStudentsButtonProps> = ({ courseId, c
       if (officersError) throw new Error(officersError.message);
       if (!officers?.length) throw new Error(`No officers found for ${courseName}`);
 
-      // 2. Fetch all applications and student IDs
+      // 2. Fetch all applications for this course
       const { data: apps, error: appsError } = await supabase
         .from('applications')
-        .select('student_id')
+        .select('student_id, status')
         .eq('course_id', courseId);
       if (appsError) throw new Error(appsError.message);
-      const studentIds = apps?.map(a => a.student_id) || [];
-      if (!studentIds.length) throw new Error(`No applications for ${courseName}`);
+      
+      // Filter out students who are already verified/rejected
+      const pendingStudentIds = apps
+        ?.filter(app => app.status !== 'approved' && app.status !== 'rejected')
+        .map(a => a.student_id) || [];
+      
+      if (!pendingStudentIds.length) throw new Error(`No pending applications for ${courseName}`);
 
       // 3. Delete existing assignments for this course
       const { error: deleteError } = await supabase
@@ -52,16 +57,20 @@ const AssignStudentsButton: React.FC<AssignStudentsButtonProps> = ({ courseId, c
         .eq('course_id', courseId);
       if (deleteError) throw new Error(deleteError.message);
 
-      // 4. Distribute evenly among officers
-      const total = studentIds.length;
+      // 4. Distribute pending students evenly among officers
+      const total = pendingStudentIds.length;
       const per = Math.floor(total / officers.length);
       const extra = total % officers.length;
       const toInsert: any[] = [];
+
+      // Shuffle the student IDs array for random distribution
+      const shuffledStudentIds = pendingStudentIds.sort(() => Math.random() - 0.5);
+
       for (let i = 0; i < officers.length; i++) {
         const count = i < extra ? per + 1 : per;
         const offset = i * per + Math.min(i, extra);
         for (let j = 0; j < count; j++) {
-          const sid = studentIds[offset + j];
+          const sid = shuffledStudentIds[offset + j];
           if (sid) {
             toInsert.push({
               student_id: sid,
@@ -74,7 +83,7 @@ const AssignStudentsButton: React.FC<AssignStudentsButtonProps> = ({ courseId, c
         }
       }
 
-      // 5. Bulk insert
+      // 5. Bulk insert new assignments
       if (toInsert.length) {
         const { error: insertError } = await supabase
           .from('student_assignments')

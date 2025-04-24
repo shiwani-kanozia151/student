@@ -157,13 +157,32 @@ const VerificationOfficerDashboard = () => {
   // Get the verification officer's information on component mount
   useEffect(() => {
     (async () => {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user) {
-        // not logged in, send them to login
-        return navigate('/verification-officer/login');
+      try {
+        // Get verification officer info from localStorage
+        const email = localStorage.getItem('verificationOfficerEmail');
+        const courseId = localStorage.getItem('verificationOfficerCourseId');
+        const courseName = localStorage.getItem('verificationOfficerCourseName');
+        
+        // Check if officer info exists in localStorage
+        if (!email || !courseId || !courseName) {
+          console.error('Missing verification officer information');
+          toast.error('Please log in again');
+          return navigate('/verification-officer/login');
+        }
+
+        // Set the officer information from localStorage
+        setOfficerInfo({
+          email,
+          courseId,
+          courseName
+        });
+
+        // Fetch students for this officer
+        fetchStudents(courseId);
+      } catch (err) {
+        console.error('Unexpected error:', err);
+        toast.error('An unexpected error occurred');
       }
-      // user.id is the officer's UID, so RLS will filter assignments to this ID
-      fetchStudents();  
     })();
   }, [navigate]);
 
@@ -183,7 +202,7 @@ const VerificationOfficerDashboard = () => {
     }
   }, [selectedStudent]);
 
-  const getCourseCategoryLabel = (courseType?: string) => {
+  const getCourseCategoryLabel = (courseType?: string | null) => {
     switch(courseType) {
       case "UG": return "Undergraduate";
       case "PG": return "Postgraduate";
@@ -233,7 +252,7 @@ const VerificationOfficerDashboard = () => {
     };
   };
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (courseId?: string) => {
     try {
       setLoading(true);
       setError(null);
@@ -242,7 +261,7 @@ const VerificationOfficerDashboard = () => {
       const { data: assignedStudents, error: assignmentError } = await supabase
         .from("student_assignments")
         .select("student_id")
-        .eq("course_id", officerInfo.courseId);
+        .eq("verification_officer_id", (await supabase.auth.getUser()).data.user?.id);
 
       if (assignmentError && !assignmentError.message.includes("does not exist")) {
         throw new Error(`Error fetching student assignments: ${assignmentError.message}`);
@@ -333,6 +352,7 @@ const VerificationOfficerDashboard = () => {
 
       const updateTime = new Date().toISOString();
       
+      // Update student status
       const { error: studentError } = await supabase
         .from("students")
         .update({
@@ -342,13 +362,37 @@ const VerificationOfficerDashboard = () => {
           updated_at: updateTime,
         })
         .eq("id", selectedStudent.id);
+
+      // Get the existing application to update status history
+      const { data: existingApp, error: fetchError } = await supabase
+        .from("applications")
+        .select("status_history")
+        .eq("student_id", selectedStudent.id)
+        .single();
+      
+      if (fetchError && !fetchError.message.includes("No rows found")) {
+        throw fetchError;
+      }
+      
+      // Create new status history entry
+      const newStatusEntry = {
+        status,
+        changed_at: updateTime,
+        remarks,
+        changed_by: localStorage.getItem('adminEmail') || "verification_officer",
+        document_verification: status === "approved" ? documentVerification : undefined
+      };
   
+      // Update application with new status and status history
       const { error: applicationError } = await supabase
         .from("applications")
         .update({
           status,
           remarks,
           updated_at: updateTime,
+          status_history: existingApp?.status_history 
+            ? [...existingApp.status_history, newStatusEntry]
+            : [newStatusEntry],
           ...(status === "approved" && { document_verification: documentVerification }),
         })
         .eq("student_id", selectedStudent.id);
@@ -471,7 +515,7 @@ const VerificationOfficerDashboard = () => {
     ];
 
     // Additional documents based on course type
-    let additionalDocuments = [];
+    let additionalDocuments: { id: string; label: string; }[] = [];
     
     if (selectedStudent.course_type === 'PG') {
       additionalDocuments.push({ id: 'ug_marksheet', label: 'UG Marksheet' });
@@ -601,7 +645,7 @@ const VerificationOfficerDashboard = () => {
           <Button
             variant="outline"
             size="icon"
-            onClick={fetchStudents}
+            onClick={() => fetchStudents()}
             title="Refresh"
           >
             <RefreshCw className="h-4 w-4" />

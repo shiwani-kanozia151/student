@@ -1,5 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '@/types/supabase';
+
+interface StudentWithApplications {
+  id: string;
+  applications: Array<{
+    course_id: string;
+    course_name: string;
+    course_type: string;
+  }>;
+}
+
+interface StudentAssignment {
+  student_id: string;
+  verification_officer_id: string;
+  course_id: string;
+  assigned_at: string;
+  assigned_by: string;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,7 +41,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
     // 1. First create the student_assignments table if it doesn't exist
     await createStudentAssignmentsTable(supabase);
@@ -49,71 +67,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Alternative approach in case the join doesn't work
-    let courseStudents = students || [];
-    
-    if (!students || students.length === 0) {
-      // First get all applications for this course
-      const { data: applications, error: appError } = await supabase
-        .from('applications')
-        .select('student_id, course_id, course_name, course_type')
-        .eq('course_id', course_id);
-        
-      if (appError) {
-        console.error('Error fetching applications:', appError);
-        return NextResponse.json(
-          { error: `Error fetching applications: ${appError.message}` },
-          { status: 500 }
-        );
-      }
-      
-      if (!applications || applications.length === 0) {
-        return NextResponse.json(
-          { message: 'No applications found for this course' },
-          { status: 200 }
-        );
-      }
-      
-      // Then get all student IDs
-      const studentIds = applications.map(app => app.student_id);
-      
-      // Fetch student details
-      const { data: studentDetails, error: detailsError } = await supabase
-        .from('students')
-        .select('id')
-        .in('id', studentIds);
-        
-      if (detailsError) {
-        console.error('Error fetching student details:', detailsError);
-        return NextResponse.json(
-          { error: `Error fetching student details: ${detailsError.message}` },
-          { status: 500 }
-        );
-      }
-      
-      // Create a combined student record with application details
-      courseStudents = studentDetails.map(student => ({
-        id: student.id,
-        applications: applications.filter(app => app.student_id === student.id)
-      }));
-      
-      if (courseStudents.length === 0) {
-        return NextResponse.json(
-          { message: 'No students found for this course' },
-          { status: 200 }
-        );
-      }
-    }
-    
-    // Filter to only include students who applied for this course
-    // and have complete course details
-    const filteredCourseStudents = courseStudents.filter(student => 
-      student.applications && 
-      student.applications.some((app: any) => 
-        app.course_id === course_id && 
-        app.course_name && 
-        app.course_type
-      )
+    // Filter students to only include those with applications for this course
+    const filteredCourseStudents = (students || []).filter((student: StudentWithApplications) => 
+      student.applications?.some(app => app.course_id === course_id)
     );
 
     if (filteredCourseStudents.length === 0) {
@@ -126,7 +82,7 @@ export async function POST(request: NextRequest) {
     // 3. Get all verification officers for this course
     const { data: verificationOfficers, error: officersError } = await supabase
       .from('verification_admins')
-      .select('id, email, course_id')
+      .select('id')
       .eq('course_id', course_id);
 
     if (officersError) {
@@ -156,11 +112,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 5. Distribute students among verification officers
-    const assignmentsToInsert = [];
+    // 5. Calculate distribution
     const officerCount = verificationOfficers.length;
     const studentsPerOfficer = Math.floor(filteredCourseStudents.length / officerCount);
     const extraStudents = filteredCourseStudents.length % officerCount;
+
+    const assignmentsToInsert: StudentAssignment[] = [];
 
     for (let i = 0; i < officerCount; i++) {
       // Calculate how many students this officer gets
@@ -180,7 +137,7 @@ export async function POST(request: NextRequest) {
             verification_officer_id: verificationOfficers[i].id,
             course_id: course_id,
             assigned_at: new Date().toISOString(),
-            assigned_by: 'system' // or you could pass in the admin email who triggered this
+            assigned_by: 'system'
           });
         }
       }
@@ -210,16 +167,17 @@ export async function POST(request: NextRequest) {
         officersWithExtraStudent: extraStudents
       }
     });
+
   } catch (error: any) {
     console.error('Error in assign-students API:', error);
     return NextResponse.json(
-      { error: `Server error: ${error.message}` },
+      { error: error.message || 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
-async function createStudentAssignmentsTable(supabase: any) {
+async function createStudentAssignmentsTable(supabase: ReturnType<typeof createClient<Database>>) {
   try {
     // Try to select from the table to check if it exists
     await supabase.from('student_assignments').select('id').limit(1);
@@ -247,12 +205,14 @@ async function createStudentAssignmentsTable(supabase: any) {
         ON public.student_assignments(course_id);
       `;
       
-      await supabase.rpc('exec_sql', { sql_query: sql }).catch(async () => {
+      const { error: rpcError } = await supabase.rpc('exec_sql', { sql_query: sql });
+      
+      if (rpcError) {
         // If RPC fails, try via REST API
         await fetch('/api/admin/create-student-assignments-table', {
           method: 'POST'
         });
-      });
+      }
     }
   }
 } 

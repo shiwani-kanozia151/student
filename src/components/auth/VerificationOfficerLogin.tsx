@@ -11,7 +11,6 @@ const VerificationOfficerLogin = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [courseId, setCourseId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -23,46 +22,63 @@ const VerificationOfficerLogin = () => {
     try {
       if (!email || !password) {
         setError("Please enter both email and password");
+        setLoading(false);
         return;
       }
 
-      // Fetch the verification admin from the database
-      const { data, error: fetchError } = await supabase
+      // Fetch the verification admin details first
+      const { data: adminData, error: fetchError } = await supabase
         .from("verification_admins")
         .select("*")
         .eq("email", email.toLowerCase())
         .single();
 
-      if (fetchError || !data) {
-        setError("Invalid credentials");
+      if (fetchError || !adminData) {
+        console.error("Fetch error:", fetchError);
+        setError("Account not found or invalid credentials");
         setLoading(false);
         return;
       }
 
-      // Compare passwords (in a real app, you'd use proper password verification)
-      if (data.password_hash !== password) {
-        setError("Invalid credentials");
+      // Verify password directly (simple comparison for verification officers)
+      if (adminData.password_text !== password) {
+        setError("Invalid email or password");
         setLoading(false);
         return;
+      }
+
+      // Try to sign in with Supabase Auth as well (for future Auth features)
+      try {
+        const { error: authError } = await supabase.auth.signInWithPassword({
+          email: email.toLowerCase(),
+          password: password,
+        });
+
+        if (authError) {
+          console.log("Auth login attempted but failed:", authError);
+          // Continue anyway since we validated using the admin table
+        }
+      } catch (authErr) {
+        console.log("Auth error ignored:", authErr);
+        // We ignore auth errors here since we're using our custom validation
       }
 
       // Store verification officer info in localStorage
       localStorage.setItem("verificationOfficerEmail", email);
-      localStorage.setItem("verificationOfficerCourseId", data.course_id);
-      localStorage.setItem("verificationOfficerCourseName", data.course_name);
+      localStorage.setItem("verificationOfficerCourseId", adminData.course_id);
+      localStorage.setItem("verificationOfficerCourseName", adminData.course_name);
       
       // Update last login time
       await supabase
         .from("verification_admins")
         .update({ last_login: new Date().toISOString() })
-        .eq("id", data.id);
+        .eq("id", adminData.id);
       
       // Redirect to dashboard
       navigate("/verification-officer/dashboard");
     } catch (err: any) {
       console.error("Login error:", err);
       setError(err.message || "An unexpected error occurred");
-    } finally {
       setLoading(false);
     }
   };

@@ -13,24 +13,50 @@ import {
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
+interface Course {
+  id: string;
+  name: string;
+  created_at?: string;
+}
+
+interface CourseEditor {
+  id: string;
+  email: string;
+  password: string;
+  course_id: string;
+  course_name: string;
+  created_at?: string;
+  last_login?: string;
+}
+
+interface NewEditor {
+  email: string;
+  password: string;
+  course_id: string;
+  course_name: string;
+}
+
 export default function CourseEditorManager() {
-  const [courses, setCourses] = useState([]);
-  const [editors, setEditors] = useState([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [editors, setEditors] = useState<CourseEditor[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCourse, setSelectedCourse] = useState(null);
-  const [newEditor, setNewEditor] = useState({
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [newEditor, setNewEditor] = useState<NewEditor>({
     email: "",
     password: "",
     course_id: "",
     course_name: ""
   });
-  const [statusMessage, setStatusMessage] = useState({ type: "", message: "" });
+  const [statusMessage, setStatusMessage] = useState<{ type: string; message: string }>({ type: "", message: "" });
 
   // Fetch courses and editors
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true);
+        
+        // Ensure the table exists with correct schema
+        await createTableIfNotExists();
         
         // Fetch courses
         const { data: coursesData, error: coursesError } = await supabase
@@ -41,19 +67,13 @@ export default function CourseEditorManager() {
         if (coursesError) throw coursesError;
         setCourses(coursesData || []);
         
-        // Check if course_editors table exists
-        await createTableIfNotExists();
-        
         // Fetch editors
         const { data: editorsData, error: editorsError } = await supabase
           .from("course_editors")
           .select("*")
           .order("created_at", { ascending: false });
           
-        if (editorsError && !editorsError.message.includes("does not exist")) {
-          throw editorsError;
-        }
-        
+        if (editorsError) throw editorsError;
         setEditors(editorsData || []);
         
       } catch (err) {
@@ -73,20 +93,20 @@ export default function CourseEditorManager() {
   // Create the course_editors table if it doesn't exist
   const createTableIfNotExists = async () => {
     try {
-      // First try to select from the table to see if it exists
-      const { error } = await supabase
-        .from("course_editors")
-        .select("id")
+      // First check if the table exists
+      const { error: checkError } = await supabase
+        .from('course_editors')
+        .select('id')
         .limit(1);
-      
-      // If we get an error about the table not existing
-      if (error && error.message.includes("does not exist")) {
-        // Run the SQL from our function
-        const sql = `
+
+      // Only create the table if it doesn't exist
+      if (checkError && checkError.message.includes('does not exist')) {
+        // Create the table with the correct schema
+        const createSql = `
           CREATE TABLE IF NOT EXISTS public.course_editors (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             email VARCHAR NOT NULL UNIQUE,
-            password_hash VARCHAR NOT NULL,
+            password VARCHAR NOT NULL,
             course_id VARCHAR NOT NULL,
             course_name VARCHAR NOT NULL,
             created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -101,11 +121,14 @@ export default function CourseEditorManager() {
         `;
         
         try {
-          // Try to execute the SQL through RPC first
-          const { error } = await supabase.rpc('exec_sql', { sql_query: sql });
+          // Try to execute the SQL through RPC
+          const { error } = await supabase.rpc('exec_sql', { sql_query: createSql });
           if (error) throw error;
+          
+          // Force a refresh of the schema cache
+          await supabase.from('course_editors').select('id').limit(1);
+          
         } catch (rpcError) {
-          // If RPC fails, try via REST API
           console.log("RPC failed, trying API endpoint:", rpcError);
           await fetch('/api/auth/create-course-editors-table', {
             method: 'POST',
@@ -115,6 +138,7 @@ export default function CourseEditorManager() {
       }
     } catch (err) {
       console.error("Error checking/creating table:", err);
+      throw err;
     }
   };
 
@@ -159,7 +183,7 @@ export default function CourseEditorManager() {
         .from("course_editors")
         .insert([{
           email: newEditor.email.toLowerCase(),
-          password_hash: newEditor.password, // In production, use proper hashing
+          password: newEditor.password,
           course_id: String(selectedCourse.id),
           course_name: selectedCourse.name,
           created_at: new Date().toISOString()
@@ -227,6 +251,14 @@ export default function CourseEditorManager() {
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold">Course Editor Management</h2>
+      
+      <Alert className="bg-blue-50 border-blue-200 text-blue-800">
+        <AlertDescription>
+          Course editors can login at: <span className="font-semibold">/course-editor/login</span>
+          <br />
+          They will need to use their email and password to access and edit their assigned course.
+        </AlertDescription>
+      </Alert>
       
       {statusMessage.message && (
         <Alert className={statusMessage.type === "error" ? "bg-red-50 border-red-200 text-red-800" : "bg-green-50 border-green-200 text-green-800"}>
@@ -328,6 +360,7 @@ export default function CourseEditorManager() {
             <TableHeader>
               <TableRow>
                 <TableHead>Email</TableHead>
+                <TableHead>Password</TableHead>
                 <TableHead>Course</TableHead>
                 <TableHead>Last Login</TableHead>
                 <TableHead>Action</TableHead>
@@ -338,6 +371,7 @@ export default function CourseEditorManager() {
                 editors.map((editor) => (
                   <TableRow key={editor.id}>
                     <TableCell>{editor.email}</TableCell>
+                    <TableCell>{editor.password}</TableCell>
                     <TableCell>{editor.course_name}</TableCell>
                     <TableCell>
                       {editor.last_login 
@@ -357,7 +391,7 @@ export default function CourseEditorManager() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-4">
+                  <TableCell colSpan={5} className="text-center py-4">
                     No course editors added yet
                   </TableCell>
                 </TableRow>
