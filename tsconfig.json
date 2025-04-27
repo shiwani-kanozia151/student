@@ -6,18 +6,23 @@
     "module": "ESNext",
     "skipLibCheck": true,
     "noEmitOnError": false,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
 
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-
+    "baseUrl": "./src",
     "strict": false,
     "paths": {
-      "@/*": ["./src/*"]
-    }
+      "@/*": ["./*"],
+      "react": ["../node_modules/@types/react"],
+      "react-dom": ["../node_modules/@types/react-dom"]
+    },
+    "types": ["react", "react-dom"]
   },
   "include": ["src"],
   "exclude": ["src/tempobook"],

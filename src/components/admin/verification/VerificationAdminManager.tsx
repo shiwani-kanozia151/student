@@ -12,11 +12,21 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { InfoIcon } from "lucide-react";
+import { InfoIcon, Eye, EyeOff } from "lucide-react";
+
+interface VerificationAdmin {
+  id: string;
+  email: string;
+  password_text: string;
+  course_id: string;
+  course_name: string;
+  created_at: string;
+  last_login?: string;
+}
 
 export default function VerificationAdminManager() {
   const [courses, setCourses] = useState([]);
-  const [verificationAdmins, setVerificationAdmins] = useState([]);
+  const [verificationAdmins, setVerificationAdmins] = useState<VerificationAdmin[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [newAdmin, setNewAdmin] = useState({
@@ -26,6 +36,8 @@ export default function VerificationAdminManager() {
     course_name: ""
   });
   const [statusMessage, setStatusMessage] = useState({ type: "", message: "" });
+  const [showPassword, setShowPassword] = useState(false);
+  const [visiblePasswords, setVisiblePasswords] = useState<{[key: string]: boolean}>({});
 
   // Fetch courses and verification admins
   useEffect(() => {
@@ -87,7 +99,7 @@ export default function VerificationAdminManager() {
           CREATE TABLE IF NOT EXISTS public.verification_admins (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             email VARCHAR NOT NULL UNIQUE,
-            password_hash VARCHAR NOT NULL,
+            password_text VARCHAR NOT NULL,
             course_id VARCHAR NOT NULL,
             course_name VARCHAR NOT NULL,
             created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -155,12 +167,11 @@ export default function VerificationAdminManager() {
       
       console.log("Adding verification admin for course:", selectedCourse);
       
-      // In a real app, you would hash the password
       const { data, error } = await supabase
         .from("verification_admins")
         .insert([{
           email: newAdmin.email.toLowerCase(),
-          password_hash: newAdmin.password, // In production, use proper hashing
+          password_text: newAdmin.password,
           course_id: String(selectedCourse.id),
           course_name: selectedCourse.name,
           created_at: new Date().toISOString()
@@ -310,13 +321,22 @@ export default function VerificationAdminManager() {
                 
                 <div className="space-y-2">
                   <label className="block text-sm font-medium">Password</label>
-                  <Input
-                    type="password"
-                    required
-                    value={newAdmin.password}
-                    onChange={(e) => setNewAdmin({...newAdmin, password: e.target.value})}
-                    placeholder="Create a password"
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      value={newAdmin.password}
+                      onChange={(e) => setNewAdmin({...newAdmin, password: e.target.value})}
+                      placeholder="Create a password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
                 
                 <Button type="submit">Add Verification Officer</Button>
@@ -349,7 +369,29 @@ export default function VerificationAdminManager() {
                   <TableRow key={admin.id}>
                     <TableCell>{admin.email}</TableCell>
                     <TableCell>{admin.course_name}</TableCell>
-                    <TableCell>{admin.password_hash}</TableCell>
+                    <TableCell className="relative">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono">
+                          {visiblePasswords[admin.id] ? admin.password_text : '•'.repeat(8)}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 p-0"
+                          onClick={() => setVisiblePasswords(prev => ({
+                            ...prev,
+                            [admin.id]: !prev[admin.id]
+                          }))}
+                        >
+                          {visiblePasswords[admin.id] ? (
+                            <Eye className="h-4 w-4" />
+                          ) : (
+                            <EyeOff className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {admin.last_login 
                         ? new Date(admin.last_login).toLocaleDateString() 

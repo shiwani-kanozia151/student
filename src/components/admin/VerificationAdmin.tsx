@@ -1,39 +1,27 @@
-import React from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Search, Eye, RefreshCw, Check, ChevronDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { sendStatusEmail } from "@/lib/emailService";
-import AssignStudentsButton from "./verification/AssignStudentsButton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+'use client';
+
+import * as React from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabaseClient";
+import { toast } from "react-hot-toast";
+import { useRouter } from "next/router";
+import { useSession } from "next-auth/react";
+import { format } from "date-fns";
+import { cn } from "../../lib/utils";
+import { Check, ChevronDown, ChevronUp, Eye, RefreshCw, Search, X } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Input } from "../ui/input";
+import { Textarea } from "../ui/textarea";
+import { Button } from "../ui/button";
+import { Typography } from "../ui/typography";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { Label } from "../ui/label";
+import { Skeleton } from "../ui/skeleton";
+import { Badge } from "../ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import ManualAssignment from './verification/ManualAssignment';
+import { sendStatusEmail } from "../../lib/emailService";
 
 interface Document {
   id?: string;
@@ -62,85 +50,217 @@ interface StatusHistoryItem {
   };
 }
 
-interface Student {
+interface ApplicationStudent {
   id: string;
-  created_at: string;
-  documents?: Document[];
-  address?: string;
-  is_verified: boolean;
-  status_history?: StatusHistoryItem[];
-  phone?: string;
-  admin_remarks?: string | null;
   name: string;
   email?: string;
+  phone?: string;
+  address?: string;
   department?: string;
-  status: "pending" | "approved" | "rejected";
-  course_id?: string | null;
-  course_type?: "UG" | "PG" | "Research" | null;
-  course_name?: string | null;
-  course_level?: string | null;
-  dob?: string | null;
-  gender?: string | null;
-  nationality?: string | null;
+  status: string;
+  is_verified: boolean;
+  created_at: string;
   updated_at?: string;
-  document_verification?: {
-    photo: boolean;
-    signature: boolean;
-    caste_certificate: boolean;
-    tenth_marksheet: boolean;
-    twelfth_marksheet: boolean;
-    entrance_scorecard: boolean;
-    ug_marksheet?: boolean;
-    pg_marksheet?: boolean;
+  document_verification?: any;
+  remarks?: string;
+  student_documents: Document[];
+}
+
+interface Application {
+  id: string;
+  student_id: string;
+  personal_details: any;
+  academic_details: any;
+  course_id: string;
+  course_type: string;
+  course_name: string;
+  status: string;
+  remarks?: string;
+  status_history: StatusHistoryItem[];
+  document_verification: any;
+  created_at: string;
+  students: ApplicationStudent[];
+}
+
+interface AcademicDetails {
+  tenth: {
+    percentage?: number;
+    year?: string;
+    board?: string;
   };
+  twelfth: {
+    percentage?: number;
+    year?: string;
+    board?: string;
+  };
+  graduation: {
+    percentage?: number;
+    year?: string;
+    university?: string;
+    course?: string;
+  };
+  entrance_score?: number;
+}
+
+interface BaseStudent {
+  id: string;
+  created_at: string;
+  name: string;
+  email?: string;
+  phone?: string | null;
+  address?: string | null;
+  department?: string | null;
+  admin_remarks?: string | null;
+  document_verification?: Record<string, boolean>;
+}
+
+interface StudentResponse extends BaseStudent {
+  is_verified: boolean;
+  updated_at?: string | null;
+  gender?: string | null;
+  dob?: string | null;
+  nationality?: string | null;
+  registration_number?: string | null;
+  batch_year?: string | null;
+  course_id?: string;
+  course_name?: string;
+  status?: string;
+}
+
+interface Student extends BaseStudent {
+  status: 'pending' | 'approved' | 'rejected';
+  documents: Document[];
+  status_history: StatusHistoryItem[];
+  academic_details?: AcademicDetails;
+  course_id: string | null;
+  course_name: string | null;
+  course_type: string | null;
+  course_level: string | null;
   personal_details?: {
-    father_name?: string;
-    mother_name?: string;
-    age?: string;
-    contact_number?: string;
-    [key: string]: any;
+    dob?: string | null;
+    gender?: string | null;
+    nationality?: string | null;
+    category?: string | null;
+    father_name?: string | null;
+    mother_name?: string | null;
+    address?: string | null;
+    contact_number?: string | null;
   };
-  academic_details?: {
-    tenth?: {
-      school?: string;
-      percentage?: string;
-      board?: string;
-    };
-    twelfth?: {
-      school?: string;
-      percentage?: string;
-      board?: string;
-    };
-    graduation?: {
-      school?: string;
-      percentage?: string;
-      degree?: string;
-    };
-    post_graduation?: {
-      school?: string;
-      percentage?: string;
-      degree?: string;
-    };
-    entrance?: {
-      exam?: string;
-      score?: string;
-      rank?: string;
-    };
-    [key: string]: any;
+  applications?: Array<{
+    id: string;
+    course_id: string;
+    course_name: string;
+    course_type?: string;
+    course_level?: string;
+    status: string;
+    remarks?: string;
+    document_verification?: Record<string, boolean>;
+    personal_details?: Record<string, any>;
+    academic_details?: AcademicDetails;
+    status_history?: StatusHistoryItem[];
+  }>;
+}
+
+interface ApplicationResponse {
+  id: string;
+  student_id: string;
+  course_id: string;
+  course_name: string;
+  course_type: string;
+  status: string;
+  remarks?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+  status_history?: StatusHistoryItem[];
+  document_verification?: Record<string, boolean>;
+  personal_details?: Record<string, any>;
+  academic_details?: AcademicDetails;
+  students: StudentResponse;
+}
+
+interface StudentData {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  department?: string;
+  is_verified?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  admin_remarks?: string;
+  gender?: string;
+  dob?: string;
+  nationality?: string;
+  registration_number?: string;
+  batch_year?: string;
+}
+
+interface ApplicationData {
+  id: string;
+  course_id: string;
+  course_name?: string;
+  status?: string;
+  remarks?: string;
+  document_verification?: Record<string, any>;
+  personal_details?: Record<string, any>;
+  academic_details?: Record<string, any>;
+  status_history?: any[];
+  students: StudentData;
+}
+
+interface ProcessedStudent extends BaseStudent {
+  status: 'pending' | 'approved' | 'rejected';
+  documents: Document[];
+  status_history: StatusHistoryItem[];
+  academic_details?: AcademicDetails;
+  course_id: string | null;
+  course_name: string | null;
+  course_type: string | null;
+  course_level: string | null;
+  personal_details?: {
+    dob?: string | null;
+    gender?: string | null;
+    nationality?: string | null;
+    category?: string | null;
+    father_name?: string | null;
+    mother_name?: string | null;
+    address?: string | null;
+    contact_number?: string | null;
   };
+}
+
+interface DocumentVerification {
+  photo: boolean;
+  signature: boolean;
+  caste_certificate: boolean;
+  tenth_marksheet: boolean;
+  twelfth_marksheet: boolean;
+  entrance_scorecard: boolean;
+  ug_marksheet?: boolean;
+  pg_marksheet?: boolean;
+}
+
+interface StudentDocument {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+  status?: string;
+  uploaded_at?: string;
 }
 
 const VerificationAdmin = () => {
   const [searchTerm, setSearchTerm] = React.useState("");
-  const [students, setStudents] = React.useState<Student[]>([]);
+  const [students, setStudents] = React.useState<ProcessedStudent[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [selectedStudent, setSelectedStudent] = React.useState<Student | null>(null);
+  const [selectedStudent, setSelectedStudent] = React.useState<ProcessedStudent | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = React.useState(false);
   const [adminRemarks, setAdminRemarks] = React.useState("");
   const [documentsLoading, setDocumentsLoading] = React.useState(false);
   const [isUpdating, setIsUpdating] = React.useState(false);
-  const [documentVerification, setDocumentVerification] = React.useState({
+  const [documentVerification, setDocumentVerification] = React.useState<Record<string, boolean>>({
     photo: false,
     signature: false,
     caste_certificate: false,
@@ -156,7 +276,8 @@ const VerificationAdmin = () => {
   const [isVerificationAdmin, setIsVerificationAdmin] = React.useState(false);
   const [verificationAdminCourseId, setVerificationAdminCourseId] = React.useState<string | null>(null);
   const [verificationAdminCourseName, setVerificationAdminCourseName] = React.useState<string | null>(null);
-  const [availableCourses, setAvailableCourses] = React.useState<{ id: string; name: string }[]>([]);
+  const [availableCourses, setAvailableCourses] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [activeTab, setActiveTab] = React.useState<string>("students");
 
   React.useEffect(() => {
     const adminRole = localStorage.getItem('adminRole');
@@ -175,11 +296,24 @@ const VerificationAdmin = () => {
             
           if (error) throw error;
           
+          console.log("Available courses:", data);
+          
           if (data && data.length > 0) {
-            setAvailableCourses(data);
+            setAvailableCourses([
+              { id: 'all', name: 'All Courses' },
+              ...data
+            ]);
             // By default, select the first course
-            setVerificationAdminCourseId(data[0].id);
-            setVerificationAdminCourseName(data[0].name);
+            const mca = data.find(course => course.name === "Master of Computer Application");
+            if (mca) {
+              console.log("Found MCA course:", mca);
+              setVerificationAdminCourseId(mca.id);
+              setVerificationAdminCourseName(mca.name);
+            } else {
+              console.log("Setting default course:", data[0]);
+              setVerificationAdminCourseId(data[0].id);
+              setVerificationAdminCourseName(data[0].name);
+            }
           }
           
           // Immediately call fetchStudents after setting state
@@ -193,8 +327,11 @@ const VerificationAdmin = () => {
       fetchCourses();
     } else if (isVerificationOfficer) {
       // For verification officers, course is already set in localStorage
-      setVerificationAdminCourseId(localStorage.getItem('verificationOfficerCourseId'));
-      setVerificationAdminCourseName(localStorage.getItem('verificationOfficerCourseName'));
+      const courseId = localStorage.getItem('verificationOfficerCourseId');
+      const courseName = localStorage.getItem('verificationOfficerCourseName');
+      console.log("Setting verification officer course:", { courseId, courseName });
+      setVerificationAdminCourseId(courseId);
+      setVerificationAdminCourseName(courseName);
     }
   }, []);
 
@@ -222,571 +359,406 @@ const VerificationAdmin = () => {
     }
   };
 
-  const validateStudent = (student: any): Student | null => {
-    if (!student || typeof student !== 'object') return null;
-    if (!student.id || typeof student.id !== 'string') return null;
-    if (!student.created_at || typeof student.created_at !== 'string') return null;
-    if (!student.name || typeof student.name !== 'string') return null;
-    if (!student.status || !['pending', 'approved', 'rejected'].includes(student.status)) return null;
-
-    const documents = Array.isArray(student.documents)
-        ? student.documents.filter((doc: any) => doc?.url)
-      : Array.isArray(student.student_documents)
-          ? student.student_documents.filter((doc: any) => doc?.url)
-      : [];
-
-    const status_history = Array.isArray(student.status_history)
-        ? student.status_history.filter((item: any) => item?.status && item?.changed_at)
-      : [];
-
-    return {
-      ...student,
-      documents,
-      status_history,
-        email: typeof student.email === 'string' ? student.email : undefined,
-        phone: typeof student.phone === 'string' ? student.phone : undefined,
-        address: typeof student.address === 'string' ? student.address : undefined,
-        department: typeof student.department === 'string' ? student.department : undefined,
-      course_id: student.course_id || student.applications?.[0]?.course_id || null,
-      course_type: student.course_type || student.applications?.[0]?.course_type || null,
-      course_name: student.course_name || student.applications?.[0]?.course_name || null,
-        course_level: student.course_level || student.applications?.[0]?.course_level || null,
-        dob: typeof student.dob === 'string' ? student.dob : null,
-        gender: typeof student.gender === 'string' ? student.gender : null,
-        nationality: typeof student.nationality === 'string' ? student.nationality : null,
-        remarks: typeof student.remarks === 'string' ? student.remarks : null,
-        is_verified: typeof student.is_verified === 'boolean' ? student.is_verified : false,
-        updated_at: typeof student.updated_at === 'string' ? student.updated_at : undefined,
-        document_verification: student.document_verification || undefined,
-        personal_details: student.personal_details || student.applications?.[0]?.personal_details || {},
-        academic_details: student.academic_details || student.applications?.[0]?.academic_details || {}
-      };
+  const processStudent = (student: StudentResponse, application?: ApplicationResponse): ProcessedStudent => {
+    const personalDetails = {
+      dob: student.dob || null,
+      gender: student.gender || null,
+      nationality: student.nationality || null,
+      category: application?.personal_details?.category || null,
+      father_name: application?.personal_details?.father_name || null,
+      mother_name: application?.personal_details?.mother_name || null,
+      address: student.address || null,
+      contact_number: student.phone || null,
     };
 
-    const fetchStudents = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+    const processedStudent: ProcessedStudent = {
+      id: student.id,
+      created_at: student.created_at,
+      name: student.name,
+      email: student.email,
+      phone: student.phone || null,
+      department: student.department || null,
+      admin_remarks: student.admin_remarks || null,
+      document_verification: student.document_verification || application?.document_verification,
+      address: student.address || null,
+      status: (application?.status || student.status || 'pending') as 'pending' | 'approved' | 'rejected',
+      documents: [],
+      status_history: application?.status_history || [],
+      course_id: application?.course_id || student.course_id || null,
+      course_name: application?.course_name || student.course_name || null,
+      course_type: application?.course_type || null,
+      course_level: null,
+      academic_details: application?.academic_details || {
+        tenth: {},
+        twelfth: {},
+        graduation: {},
+        entrance_score: undefined
+      },
+      personal_details: personalDetails,
+    };
 
-        // Check if user is a verification officer (using localStorage)
-        const isVerificationOfficer = localStorage.getItem('verificationOfficerEmail') !== null;
-        const verificationOfficerEmail = localStorage.getItem('verificationOfficerEmail');
-        const verificationOfficerCourseId = localStorage.getItem('verificationOfficerCourseId');
-        
-        // Log the current mode and course information
-        console.log("Verification mode:", isVerificationAdmin ? "Admin" : "Officer");
-        console.log("Course ID filter:", verificationAdminCourseId || verificationOfficerCourseId || "None");
-        
-        // First, let's get all students to debug
-        const { data: allStudents, error: allStudentsError } = await supabase
-          .from("students")
-          .select("id, name, email, status")
-          .order("created_at", { ascending: false });
-          
-        console.log(`Total students in database: ${allStudents?.length || 0}`);
-        
-        // Now do the real query with the necessary joins
-        let query = supabase
-          .from("students")
-          .select(`
-            *,
-            student_documents!student_id(
-              id,
-              type,
-              url,
-              name,
-              uploaded_at,
-              application_id
-            ),
-            applications!left(
-              id,
-              personal_details,
-              academic_details,
-              course_id,
-              course_type,
-              course_name,
-              status,
-              remarks,
-              status_history,
-              document_verification,
-              created_at
-            )
-          `)
-          .order("created_at", { ascending: false });
+    return processedStudent;
+  };
 
-        // If this is a verification admin, they can see ALL students across ALL courses
-        // If it's a verification officer, filter by their assigned course
-        if (isVerificationAdmin) {
-          // For verification admins, only filter by course if a specific course is selected
-          if (verificationAdminCourseId) {
-            console.log(`Admin filtering for specific course ID: ${verificationAdminCourseId}`);
-            query = query.eq("applications.course_id", verificationAdminCourseId);
-          } else {
-            console.log("Admin viewing all courses - no course filter applied");
-          }
-        } else if (isVerificationOfficer) {
-          // For verification officers, always filter by their assigned course
-          console.log(`Officer filtering for assigned course: ${verificationOfficerCourseId}`);
-          query = query.eq("applications.course_id", verificationOfficerCourseId);
-          
-          // First, get the verification officer's ID
-          const { data: officerData, error: officerError } = await supabase
-            .from("verification_admins")
-            .select("id")
-            .eq("email", verificationOfficerEmail)
-            .single();
+  const fetchStudents = async () => {
+    if (!verificationAdminCourseId) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      console.log('Fetching students for course:', verificationAdminCourseId);
+      
+      // First get all applications for the course
+      const { data: applications, error: applicationsError } = await supabase
+        .from('applications')
+        .select(`
+          *,
+          students (
+            id,
+            name,
+            email,
+            phone,
+            address,
+            department,
+            is_verified,
+            created_at,
+            updated_at,
+            admin_remarks,
+            gender,
+            dob,
+            nationality,
+            registration_number,
+            batch_year
+          )
+        `)
+        .eq('course_id', verificationAdminCourseId);
 
-          if (officerError) {
-            throw new Error(`Failed to get verification officer details: ${officerError.message}`);
-          }
-          
-          if (!officerData || !officerData.id) {
-            throw new Error("Verification officer ID not found");
-          }
-
-          // Get assigned students for this officer
-          const { data: assignedStudents, error: assignmentError } = await supabase
-            .from("student_assignments")
-            .select("student_id")
-            .eq("verification_officer_id", officerData.id)
-            .eq("course_id", verificationOfficerCourseId);
-
-          if (assignmentError && !assignmentError.message.includes("does not exist")) {
-            throw new Error(`Error fetching student assignments: ${assignmentError.message}`);
-          }
-
-          // Create an array of student IDs assigned to this officer
-          const assignedStudentIds = (assignedStudents || []).map(assignment => assignment.student_id);
-
-          // If we have assigned students, only get those specific students
-          if (assignedStudents && assignedStudents.length > 0) {
-            console.log(`Filtering for ${assignedStudentIds.length} assigned students`);
-            query = query.in("id", assignedStudentIds);
-          }
-        }
-
-        const { data: studentsData, error: studentsError } = await query;
-
-        if (studentsError) {
-          console.error("Error fetching students data:", studentsError);
-          throw studentsError;
-        }
-        
-        console.log(`Query returned ${studentsData?.length || 0} student records`);
-        console.log("Sample student data:", studentsData?.length ? studentsData[0] : "No data");
-
-        // Process students with less filtering
-        const validatedStudents = (studentsData || [])
-          .map(student => {
-            try {
-              // Basic validation of required fields
-              if (!student || !student.id || !student.name) {
-                console.log("Skipping student with missing required fields:", student?.id);
-                return null;
-              }
-              
-              // Get application for this student if exists
-              const application = student.applications?.[0];
-              
-              // Handle students with no applications
-              if (!application) {
-                // Only include students without applications when viewing ALL courses
-                if (isVerificationAdmin && !verificationAdminCourseId) {
-                  console.log("Including student with no application (All Courses view):", student.id);
-                  return validateStudent({
-                    ...student,
-                    documents: student.student_documents || [],
-                    status_history: [],
-                    course_id: null,
-                    course_type: null,
-                    course_name: "Not Assigned",
-                  });
-                } else {
-                  // Skip students without applications when course filtering is active
-                  console.log("Skipping student with no application when course filtering is active");
-                  return null;
-                }
-              }
-              
-              // When a specific course is selected (for admin or officer), strictly filter by that course
-              if (verificationAdminCourseId && isVerificationAdmin) {
-                // If student's course ID doesn't match the selected course, skip them
-                if (application.course_id !== verificationAdminCourseId) {
-                  console.log(`Skipping student: course ID ${application.course_id || 'none'} doesn't match selected ${verificationAdminCourseId}`);
-                  return null;
-                }
-              } else if (isVerificationOfficer && verificationOfficerCourseId) {
-                // For verification officers, enforce course filtering
-                if (application.course_id !== verificationOfficerCourseId) {
-                  console.log(`Skipping student: course ID ${application.course_id || 'none'} doesn't match officer's course ${verificationOfficerCourseId}`);
-                  return null;
-                }
-              }
-              
-              return validateStudent({
-                ...student,
-                ...(application?.personal_details || {}),
-                documents: student.student_documents || [],
-                status_history: application?.status_history || [],
-                status: application?.status || student.status || "pending",
-                course_id: application?.course_id || null,
-                course_name: application?.course_name || "Not Assigned",
-                course_type: application?.course_type || null,
-                remarks: application?.remarks || student.remarks,
-                document_verification: application?.document_verification || undefined
-              });
-            } catch (err) {
-              console.error("Error processing student:", student?.id, err);
-              return null;
-            }
-          })
-          .filter(Boolean) as Student[];
-
-        console.log(`Filtered to ${validatedStudents.length} valid students`);
-        setStudents(validatedStudents);
-      } catch (err) {
-        console.error("Error fetching students:", err);
-        setError(err instanceof Error ? err.message : "Failed to load students");
-        toast.error("Failed to load students");
-      } finally {
+      if (applicationsError) throw applicationsError;
+      
+      console.log('Found applications:', applications?.length);
+      
+      if (!applications?.length) {
+        setStudents([]);
         setLoading(false);
+        return;
       }
-    };
 
-    React.useEffect(() => {
-      if (verificationAdminCourseId || isVerificationAdmin) {
-        fetchStudents();
-        
-        // Set up real-time subscriptions for database changes
-        const channel = supabase
-          .channel("students_changes")
-          .on(
-            "postgres_changes",
-            { 
-              event: "*", 
-              schema: "public", 
-              table: "students" 
-            },
-            fetchStudents
-          )
-          .subscribe();
+      // Process and validate each application
+      const processedStudents = applications
+        .map((app: ApplicationResponse) => {
+          const student = app.students;
+          if (!student) {
+            console.log('Application missing student data:', app.id);
+            return null;
+          }
+          // Combine application and student data
+          const processedStudent: ProcessedStudent = processStudent(student, app);
 
-        const applicationsChannel = supabase
-          .channel("applications_changes")
-          .on(
-            "postgres_changes",
-            { 
-              event: "*", 
-              schema: "public", 
-              table: "applications" 
-            },
-            fetchStudents
-          )
-          .subscribe();
-        
-        // Cleanup function to remove channel subscriptions on unmount
-        return () => {
-          supabase.removeChannel(channel);
-          supabase.removeChannel(applicationsChannel);
-        };
+          return processedStudent;
+        })
+        .filter((student): student is ProcessedStudent => student !== null);
+
+      console.log('Processed students:', processedStudents.length);
+      setStudents(processedStudents);
+    } catch (err) {
+      console.error('Error fetching students:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch students');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (verificationAdminCourseId || isVerificationAdmin) {
+      fetchStudents();
+      
+      // Set up real-time subscriptions for database changes
+      const channel = supabase
+        .channel("students_changes")
+        .on(
+          "postgres_changes",
+          { 
+            event: "*", 
+            schema: "public", 
+            table: "students" 
+          },
+          fetchStudents
+        )
+        .subscribe();
+
+      const applicationsChannel = supabase
+        .channel("applications_changes")
+        .on(
+          "postgres_changes",
+          { 
+            event: "*", 
+            schema: "public", 
+            table: "applications" 
+          },
+          fetchStudents
+        )
+        .subscribe();
+      
+      // Cleanup function to remove channel subscriptions on unmount
+      return () => {
+        supabase.removeChannel(channel);
+        supabase.removeChannel(applicationsChannel);
+      };
+    }
+  }, [verificationAdminCourseId]);
+
+  const handleStatusUpdate = async (status: "pending" | "approved" | "rejected") => {
+    if (!selectedStudent) return;
+  
+    try {
+      setIsUpdating(true);
+      const remarks = adminRemarks.trim();
+
+      if ((status === "pending" || status === "rejected") && !remarks) {
+        toast.error("Please provide remarks for pending/rejected status");
+        return;
       }
-    }, [verificationAdminCourseId]);
 
-    const handleStatusUpdate = async (status: "pending" | "approved" | "rejected") => {
-      if (!selectedStudent) return;
-    
-      try {
-        setIsUpdating(true);
-        const remarks = adminRemarks.trim();
-
-        if ((status === "pending" || status === "rejected") && !remarks) {
-          toast.error("Please provide remarks for pending/rejected status");
-          return;
-        }
-
-        const updateTime = new Date().toISOString();
-        
-        // Update student status with timestamp to ensure triggers fire
-        const { error: studentError } = await supabase
-          .from("students")
-          .update({
-            status,
-            admin_remarks: remarks,
-            is_verified: status === "approved",
-            updated_at: updateTime,
-            update_triggered: new Date().getTime().toString() // Add random value to ensure update triggers fire
-          })
-          .eq("id", selectedStudent.id);
-    
-        // Get the existing application to update status history
-        const { data: existingApp, error: fetchError } = await supabase
-          .from("applications")
-          .select("status_history")
-          .eq("student_id", selectedStudent.id)
-          .single();
-        
-        if (fetchError && !fetchError.message.includes("No rows found")) {
-          throw fetchError;
-        }
-        
-        // Create new status history entry
-        const newStatusEntry = {
+      const updateTime = new Date().toISOString();
+      
+      // Update student status with timestamp to ensure triggers fire
+      const { error: studentError } = await supabase
+        .from("students")
+        .update({
           status,
-          changed_at: updateTime,
+          admin_remarks: remarks,
+          is_verified: status === "approved",
+          updated_at: updateTime,
+          update_triggered: new Date().getTime().toString() // Add random value to ensure update triggers fire
+        })
+        .eq("id", selectedStudent.id);
+  
+      // Get the existing application to update status history
+      const { data: existingApp, error: fetchError } = await supabase
+        .from("applications")
+        .select("status_history")
+        .eq("student_id", selectedStudent.id)
+        .single();
+      
+      if (fetchError && !fetchError.message.includes("No rows found")) {
+        throw fetchError;
+      }
+      
+      // Create new status history entry
+      const newStatusEntry = {
+        status,
+        changed_at: updateTime,
+        remarks,
+        changed_by: localStorage.getItem('adminEmail') || "admin",
+        document_verification: status === "approved" ? documentVerification : undefined
+      };
+      
+      // Update application with new status and status history
+      const { error: applicationError } = await supabase
+        .from("applications")
+        .update({
+          status,
           remarks,
-          changed_by: localStorage.getItem('adminEmail') || "admin",
-          document_verification: status === "approved" ? documentVerification : undefined
-        };
-        
-        // Update application with new status and status history
-        const { error: applicationError } = await supabase
-          .from("applications")
-          .update({
+          updated_at: updateTime,
+          status_history: existingApp?.status_history 
+            ? [...existingApp.status_history, newStatusEntry]
+            : [newStatusEntry],
+          ...(status === "approved" && { document_verification: documentVerification }),
+        })
+        .eq("student_id", selectedStudent.id);
+  
+      if (studentError || applicationError) throw studentError || applicationError;
+  
+      if (selectedStudent.email) {
+        await sendStatusEmail(selectedStudent.email, status, remarks);
+        setEmailSentTo(selectedStudent.email);
+        setEmailStatus(status);
+        setShowEmailSentPopup(true);
+      }
+      
+      setIsDetailsOpen(false);
+      fetchStudents();
+    } catch (err) {
+      console.error("Update error:", err);
+      toast.error("Failed to update status");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const viewStudentDetails = async (studentId: string) => {
+    try {
+      setDocumentsLoading(true);
+
+      const { data: studentData, error: studentError } = await supabase
+        .from("students")
+        .select(`
+          *,
+          student_documents!student_id(
+            id,
+            type,
+            url,
+            name,
+            uploaded_at,
+            application_id
+          ),
+          applications!student_id(
+            id,
+            personal_details,
+            academic_details,
+            course_id,
+            course_type,
+            course_name,
             status,
             remarks,
-            updated_at: updateTime,
-            status_history: existingApp?.status_history 
-              ? [...existingApp.status_history, newStatusEntry]
-              : [newStatusEntry],
-            ...(status === "approved" && { document_verification: documentVerification }),
-          })
-          .eq("student_id", selectedStudent.id);
-    
-        if (studentError || applicationError) throw studentError || applicationError;
-    
-        if (selectedStudent.email) {
-          await sendStatusEmail(selectedStudent.email, status, remarks);
-          setEmailSentTo(selectedStudent.email);
-          setEmailStatus(status);
-          setShowEmailSentPopup(true);
-        }
-        
-        setIsDetailsOpen(false);
-        fetchStudents();
-      } catch (err) {
-        console.error("Update error:", err);
-        toast.error("Failed to update status");
-      } finally {
-        setIsUpdating(false);
+            status_history,
+            document_verification
+          )
+        `)
+        .eq("id", studentId)
+        .single();
+
+      if (studentError) throw studentError;
+      if (!studentData) {
+        toast.error("Student not found");
+        return;
       }
-    };
 
-    const viewStudentDetails = async (studentId: string) => {
-      try {
-        setDocumentsLoading(true);
+      const processedStudent = processStudent(studentData, studentData.applications?.[0] as ApplicationResponse);
 
-        const { data: studentData, error: studentError } = await supabase
-          .from("students")
-          .select(`
-            *,
-            student_documents!student_id(
-              id,
-              type,
-              url,
-              name,
-              uploaded_at,
-              application_id
-            ),
-            applications!student_id(
-              id,
-              personal_details,
-              academic_details,
-              course_id,
-              course_type,
-              course_name,
-              status,
-              remarks,
-              status_history,
-              document_verification
-            )
-          `)
-          .eq("id", studentId)
-          .single();
-
-        if (studentError) throw studentError;
-        if (!studentData) {
-          toast.error("Student not found");
-          return;
-        }
-
-        const validatedStudent = validateStudent({
-          ...studentData,
-          ...(studentData.applications?.[0]?.personal_details || {}),
-          documents: studentData.student_documents || [],
-          status_history: studentData.applications?.[0]?.status_history || [],
-          status: studentData.applications?.[0]?.status || studentData.status,
-          remarks: studentData.applications?.[0]?.remarks || studentData.remarks,
-          document_verification: studentData.applications?.[0]?.document_verification || undefined
-        });
-
-        if (!validatedStudent) {
-          throw new Error("Invalid student data");
-        }
-
-        setSelectedStudent(validatedStudent);
-        setAdminRemarks(validatedStudent.admin_remarks || "");
-        setIsDetailsOpen(true);
-      } catch (err) {
-        console.error("Error loading student details:", err);
-        toast.error("Failed to load student details");
-      } finally {
-        setDocumentsLoading(false);
+      if (!processedStudent) {
+        throw new Error("Invalid student data");
       }
-    };
 
-    const filteredStudents = students.filter((student) => {
-      if (!searchTerm) return true;
-      const search = searchTerm.toLowerCase();
-      return (
-        (student.name?.toLowerCase().includes(search) || false) ||
-        (student.email?.toLowerCase().includes(search) || false) ||
-        (student.course_type?.toLowerCase().includes(search) || false) ||
-        (student.course_name?.toLowerCase().includes(search) || false)
+      setSelectedStudent(processedStudent);
+      setAdminRemarks(processedStudent.admin_remarks || "");
+      setIsDetailsOpen(true);
+    } catch (err) {
+      console.error("Error loading student details:", err);
+      toast.error("Failed to load student details");
+    } finally {
+      setDocumentsLoading(false);
+    }
+  };
+
+  const filteredStudents = students.filter((student) => {
+    if (!searchTerm) return true;
+    const search = searchTerm.toLowerCase();
+    return (
+      (student.name?.toLowerCase().includes(search) || false) ||
+      (student.email?.toLowerCase().includes(search) || false) ||
+      (student.course_type?.toLowerCase().includes(search) || false) ||
+      (student.course_name?.toLowerCase().includes(search) || false)
+    );
+  });
+
+  const getStatusBadge = (status: string) => {
+    switch(status) {
+      case "approved":
+        return <Badge className="bg-green-100 text-green-800">{status}</Badge>;
+      case "rejected":
+        return <Badge className="bg-red-100 text-red-800">{status}</Badge>;
+      default:
+        return <Badge className="bg-yellow-100 text-yellow-800">{status}</Badge>;
+    }
+  };
+
+  const DocumentVerificationCheckboxes = () => {
+    if (!selectedStudent) return null;
+
+    // Base documents that are always required
+    const baseDocuments = [
+      { id: 'photo', label: 'Photo' },
+      { id: 'signature', label: 'Signature' },
+      { id: 'caste_certificate', label: 'Caste Certificate' },
+      { id: 'tenth_marksheet', label: '10th Marksheet' },
+      { id: 'twelfth_marksheet', label: '12th Marksheet' },
+      { id: 'entrance_scorecard', label: 'Entrance Scorecard' },
+    ];
+
+    // Additional documents based on course type
+    let additionalDocuments = [];
+    
+    if (selectedStudent.course_type === 'PG') {
+      additionalDocuments.push({ id: 'ug_marksheet', label: 'UG Marksheet' });
+    } else if (selectedStudent.course_type === 'Research') {
+      additionalDocuments.push(
+        { id: 'ug_marksheet', label: 'UG Marksheet' },
+        { id: 'pg_marksheet', label: 'PG Marksheet' }
       );
-    });
+    }
 
-    const getStatusBadge = (status: string) => {
-      switch(status) {
-        case "approved":
-          return <Badge className="bg-green-100 text-green-800">{status}</Badge>;
-        case "rejected":
-          return <Badge className="bg-red-100 text-red-800">{status}</Badge>;
-        default:
-          return <Badge className="bg-yellow-100 text-yellow-800">{status}</Badge>;
-      }
-    };
+    // Combine all documents
+    const allDocuments = [...baseDocuments, ...additionalDocuments];
 
-    const DocumentVerificationCheckboxes = () => {
-      if (!selectedStudent) return null;
-
-      // Base documents that are always required
-      const baseDocuments = [
-        { id: 'photo', label: 'Photo' },
-        { id: 'signature', label: 'Signature' },
-        { id: 'caste_certificate', label: 'Caste Certificate' },
-        { id: 'tenth_marksheet', label: '10th Marksheet' },
-        { id: 'twelfth_marksheet', label: '12th Marksheet' },
-        { id: 'entrance_scorecard', label: 'Entrance Scorecard' },
-      ];
-
-      // Additional documents based on course type
-      let additionalDocuments = [];
-      
-      if (selectedStudent.course_type === 'PG') {
-        additionalDocuments.push({ id: 'ug_marksheet', label: 'UG Marksheet' });
-      } else if (selectedStudent.course_type === 'Research') {
-        additionalDocuments.push(
-          { id: 'ug_marksheet', label: 'UG Marksheet' },
-          { id: 'pg_marksheet', label: 'PG Marksheet' }
-        );
-      }
-
-      // Combine all documents
-      const allDocuments = [...baseDocuments, ...additionalDocuments];
-
-      return (
-        <div className="mb-6">
-          <Label className="block text-sm text-gray-500 mb-3">Document Verification</Label>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {allDocuments.map((doc) => (
-              <div key={doc.id} className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDocumentVerification(prev => ({
-                      ...prev,
-                      [doc.id]: !prev[doc.id as keyof typeof documentVerification]
-                    }));
-                  }}
-                  className={`h-5 w-5 rounded border flex items-center justify-center ${
-                    documentVerification[doc.id as keyof typeof documentVerification]
-                      ? 'bg-blue-600 border-blue-600'
-                      : 'border-gray-300'
-                  }`}
-                >
-                  {documentVerification[doc.id as keyof typeof documentVerification] && (
-                    <Check className="h-3 w-3 text-white" />
-                  )}
-                </button>
-                <label className="text-sm text-gray-700">
-                  {doc.label}
-                </label>
-              </div>
-            ))}
-          </div>
+    return (
+      <div className="mb-6">
+        <Label className="block text-sm text-gray-500 mb-3">Document Verification</Label>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {allDocuments.map((doc) => (
+            <div key={doc.id} className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDocumentVerification(prev => ({
+                    ...prev,
+                    [doc.id]: !prev[doc.id as keyof typeof documentVerification]
+                  }));
+                }}
+                className={`h-5 w-5 rounded border flex items-center justify-center ${
+                  documentVerification[doc.id as keyof typeof documentVerification]
+                    ? 'bg-blue-600 border-blue-600'
+                    : 'border-gray-300'
+                }`}
+              >
+                {documentVerification[doc.id as keyof typeof documentVerification] && (
+                  <Check className="h-3 w-3 text-white" />
+                )}
+              </button>
+              <label className="text-sm text-gray-700">
+                {doc.label}
+              </label>
+            </div>
+          ))}
         </div>
-      );
-    };
+      </div>
+    );
+  };
 
-    const renderAcademicDetails = (student: Student) => {
-      if (!student.academic_details) return null;
-       
-      const getDisplayLabel = (key: string, section?: string) => {
-        const displayKey = key === 'bboard' ? 'board' : key;
-        
-        // Change 'percentage' to 'percentage/cgpa' for all sections
-        if (key === 'percentage') {
-          return 'percentage/cgpa';
-        }
-        
-        // Change 'school' to 'college name' for graduation and post-graduation
-        if ((section === 'graduation' || section === 'post_graduation') && key === 'school') {
-          return 'college name';
-        }
+  const renderAcademicDetails = (student: Student) => {
+    if (!student.academic_details) return null;
+     
+    const getDisplayLabel = (key: string, section?: string) => {
+      const displayKey = key === 'bboard' ? 'board' : key;
       
-        if ((section === 'graduation' || section === 'post_graduation') && key === 'degree') {
-          return 'university name';
-        }
-        
-        return displayKey.replace(/_/g, ' ');
-      };
+      // Change 'percentage' to 'percentage/cgpa' for all sections
+      if (key === 'percentage') {
+        return 'percentage/cgpa';
+      }
+      
+      // Change 'school' to 'college name' for graduation and post-graduation
+      if ((section === 'graduation' || section === 'post_graduation') && key === 'school') {
+        return 'college name';
+      }
     
+      if ((section === 'graduation' || section === 'post_graduation') && key === 'degree') {
+        return 'university name';
+      }
+      
+      return displayKey.replace(/_/g, ' ');
+    };
+  
 
-      return (
-        <div className="space-y-4">
-          {/* 10th Details - Common for all */}
-          {student.academic_details.tenth && (
-            <div>
-              <Label className="text-sm text-gray-500 font-medium">10th Standard Details</Label>
-              <div className="grid grid-cols-3 gap-4 mt-2">
-                {Object.entries(student.academic_details.tenth).map(([key, value]) => (
-                  <div key={`tenth-${key}`}>
-                    <Label className="text-sm text-gray-500">
-                      {getDisplayLabel(key).charAt(0).toUpperCase() + getDisplayLabel(key).slice(1)}
-                    </Label>
-                    <p>{String(value) || "N/A"}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-    
-          {/* 12th Details - Common for all */}
-          {student.academic_details.twelfth && (
-            <div>
-              <Label className="text-sm text-gray-500 font-medium">12th Standard Details</Label>
-              <div className="grid grid-cols-3 gap-4 mt-2">
-                {Object.entries(student.academic_details.twelfth).map(([key, value]) => (
-                  <div key={`twelfth-${key}`}>
-                    <Label className="text-sm text-gray-500">
-                      {getDisplayLabel(key).charAt(0).toUpperCase() + getDisplayLabel(key).slice(1)}
-                    </Label>
-                    <p>{String(value) || "N/A"}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-    
-          {/* UG Details - For PG and Research */}
-          {student.academic_details.graduation && (
+    return (
+      <div className="space-y-4">
+        {/* 10th Details - Common for all */}
+        {student.academic_details.tenth && (
           <div>
-            <Label className="text-sm text-gray-500 font-medium">
-              {student.course_type === 'PG' ? 'Undergraduate Details' : 'Bachelor\'s Degree Details'}
-            </Label>
+            <Label className="text-sm text-gray-500 font-medium">10th Standard Details</Label>
             <div className="grid grid-cols-3 gap-4 mt-2">
-              {Object.entries(student.academic_details.graduation).map(([key, value]) => (
-                <div key={`graduation-${key}`}>
+              {Object.entries(student.academic_details.tenth).map(([key, value]) => (
+                <div key={`tenth-${key}`}>
                   <Label className="text-sm text-gray-500">
                     {getDisplayLabel(key).charAt(0).toUpperCase() + getDisplayLabel(key).slice(1)}
                   </Label>
@@ -796,138 +768,198 @@ const VerificationAdmin = () => {
             </div>
           </div>
         )}
-      </div>
-    );
+  
+        {/* 12th Details - Common for all */}
+        {student.academic_details.twelfth && (
+          <div>
+            <Label className="text-sm text-gray-500 font-medium">12th Standard Details</Label>
+            <div className="grid grid-cols-3 gap-4 mt-2">
+              {Object.entries(student.academic_details.twelfth).map(([key, value]) => (
+                <div key={`twelfth-${key}`}>
+                  <Label className="text-sm text-gray-500">
+                    {getDisplayLabel(key).charAt(0).toUpperCase() + getDisplayLabel(key).slice(1)}
+                  </Label>
+                  <p>{String(value) || "N/A"}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+  
+        {/* UG Details - For PG and Research */}
+        {student.academic_details.graduation && (
+        <div>
+          <Label className="text-sm text-gray-500 font-medium">
+            {student.course_type === 'PG' ? 'Undergraduate Details' : 'Bachelor\'s Degree Details'}
+          </Label>
+          <div className="grid grid-cols-3 gap-4 mt-2">
+            {Object.entries(student.academic_details.graduation).map(([key, value]) => (
+              <div key={`graduation-${key}`}>
+                <Label className="text-sm text-gray-500">
+                  {getDisplayLabel(key).charAt(0).toUpperCase() + getDisplayLabel(key).slice(1)}
+                </Label>
+                <p>{String(value) || "N/A"}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+  const fetchStudentDocuments = async (studentId: string, applicationId: string) => {
+    try {
+      const { data: documents, error } = await supabase
+        .from('student_documents')
+        .select('*')
+        .eq('student_id', studentId)
+        .eq('application_id', applicationId);
+
+      if (error) throw error;
+      return documents as StudentDocument[];
+    } catch (err) {
+      console.error('Error fetching student documents:', err);
+      return [];
+    }
   };
 
   return (
-    <div className="space-y-4">
-      {isVerificationAdmin && availableCourses.length > 0 && (
-        <div className="flex items-center space-x-2 mb-4">
-          <Label className="whitespace-nowrap">Select Course:</Label>
-          <Select 
-            value={verificationAdminCourseId || ""} 
-            onValueChange={(value) => {
-              // Find the course name from the available courses
-              const courseName = availableCourses.find(c => c.id === value)?.name || "";
-              setVerificationAdminCourseId(value === "all" ? null : value);
-              setVerificationAdminCourseName(value === "all" ? null : courseName);
-            }}
-          >
-            <SelectTrigger className="w-[300px]">
-              <SelectValue placeholder="Select a course to manage" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Courses</SelectItem>
-              {availableCourses.map(course => (
-                <SelectItem key={course.id} value={course.id}>
-                  {course.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+    <div className="container mx-auto p-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <div className="flex justify-between items-center mb-4">
+          <TabsList>
+            <TabsTrigger value="students">Student List</TabsTrigger>
+            <TabsTrigger value="manual-assignment">Manual Assignment</TabsTrigger>
+          </TabsList>
 
-      {verificationAdminCourseName && (
-        <h2 className="text-xl font-medium text-gray-800">
-          Manage student applications for {verificationAdminCourseName}
-        </h2>
-      )}
-
-      <div className="flex justify-between items-center">
-        <div className="relative w-72">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search students..."
-            className="pl-8"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchStudents}
-            disabled={loading}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          {localStorage.getItem('adminRole') === 'verification' && verificationAdminCourseId && (
-            <AssignStudentsButton 
-              courseId={verificationAdminCourseId} 
-              courseName={verificationAdminCourseName || ""}
-            />
+          {isVerificationAdmin && (
+            <Select
+              value={verificationAdminCourseId || ''}
+              onValueChange={(value) => {
+                setVerificationAdminCourseId(value);
+                if (value === 'all') {
+                  setVerificationAdminCourseName('All Courses');
+                } else {
+                  const course = availableCourses.find(c => c.id === value);
+                  setVerificationAdminCourseName(course?.name || null);
+                }
+              }}
+            >
+              <SelectTrigger className="w-[250px]">
+                <SelectValue placeholder="Select Course" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableCourses.map((course) => (
+                  <SelectItem key={course.id} value={course.id}>
+                    {course.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
         </div>
-      </div>
 
-      {error && (
-        <div className="bg-red-50 text-red-700 p-4 rounded-md my-4">
-          {error}
-        </div>
-      )}
+        <TabsContent value="students">
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex gap-2 items-center">
+              <Search className="w-4 h-4 text-gray-500" />
+              <Input
+                placeholder="Search students..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-64"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={fetchStudents}
+              disabled={loading}
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
 
-      <div className="border rounded-md">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Course Type</TableHead>
-              <TableHead>Course Name</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-48" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                  <TableCell className="text-right"><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
+          {error && (
+            <div className="bg-red-50 text-red-700 p-4 rounded-md my-4">
+              {error}
+            </div>
+          )}
+
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Course Type</TableHead>
+                  <TableHead>Course Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))
-            ) : filteredStudents.length ? (
-              filteredStudents.map((student) => (
-                <TableRow key={student.id}>
-                  <TableCell className="font-medium">{student.name}</TableCell>
-                  <TableCell>{student.email || "N/A"}</TableCell>
-                  <TableCell>{getCourseCategoryLabel(student.course_type)}</TableCell>
-                  <TableCell>
-                    {student.course_name || "Not Assigned"}
-                  </TableCell>
-                  <TableCell>{getStatusBadge(student.status)}</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => viewStudentDetails(student.id)}
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      View
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
-                  {searchTerm
-                    ? "No students found matching your search."
-                    : "No students available."}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-48" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : filteredStudents.length ? (
+                  filteredStudents.map((student) => (
+                    <TableRow key={student.id}>
+                      <TableCell className="font-medium">{student.name}</TableCell>
+                      <TableCell>{student.email || "N/A"}</TableCell>
+                      <TableCell>{getCourseCategoryLabel(student.course_type)}</TableCell>
+                      <TableCell>
+                        {student.course_name || "Not Assigned"}
+                      </TableCell>
+                      <TableCell>{getStatusBadge(student.status)}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => viewStudentDetails(student.id)}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                      {searchTerm
+                        ? "No students found matching your search."
+                        : "No students available."}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="manual-assignment">
+          {verificationAdminCourseId && verificationAdminCourseName ? (
+            <ManualAssignment
+              courseId={verificationAdminCourseId}
+              courseName={verificationAdminCourseName}
+            />
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-gray-500">Please select a course to manage manual assignments</p>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {selectedStudent && (
         <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
@@ -960,18 +992,24 @@ const VerificationAdmin = () => {
                     <Label className="text-sm text-gray-500">Phone</Label>
                     <p>{selectedStudent.phone || selectedStudent.personal_details?.contact_number || "N/A"}</p>
                   </div>
-                  <div>
-                    <Label className="text-sm text-gray-500">Date of Birth</Label>
-                    <p>{selectedStudent.dob || "N/A"}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm text-gray-500">Gender</Label>
-                    <p>{selectedStudent.gender || "N/A"}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm text-gray-500">Nationality</Label>
-                    <p>{selectedStudent.nationality || "N/A"}</p>
-                  </div>
+                  {selectedStudent.personal_details?.dob && (
+                    <div>
+                      <Label className="text-sm text-gray-500">Date of Birth</Label>
+                      <p>{selectedStudent.personal_details.dob}</p>
+                    </div>
+                  )}
+                  {selectedStudent.personal_details?.gender && (
+                    <div>
+                      <Label className="text-sm text-gray-500">Gender</Label>
+                      <p>{selectedStudent.personal_details.gender}</p>
+                    </div>
+                  )}
+                  {selectedStudent.personal_details?.nationality && (
+                    <div>
+                      <Label className="text-sm text-gray-500">Nationality</Label>
+                      <p>{selectedStudent.personal_details.nationality}</p>
+                    </div>
+                  )}
                   <div>
                     <Label className="text-sm text-gray-500">Father's Name</Label>
                     <p>{selectedStudent.personal_details?.father_name || "N/A"}</p>
@@ -984,7 +1022,9 @@ const VerificationAdmin = () => {
 
                 <div>
                   <Label className="text-sm text-gray-500">Address</Label>
-                  <p className="mt-1">{selectedStudent.address || "N/A"}</p>
+                  <p>
+                    {selectedStudent.personal_details?.address || "Not provided"}
+                  </p>
                 </div>
 
                 <div>

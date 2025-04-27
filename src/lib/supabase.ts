@@ -1,24 +1,23 @@
 import { createClient } from "@supabase/supabase-js";
 import { Database } from "@/types/supabase";
+import { env } from './env';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Supabase credentials are not defined in environment variables");
-}
-
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10, // Adjust based on your needs
+// Create Supabase client
+export const supabase = createClient<Database>(
+  env.VITE_SUPABASE_URL,
+  env.VITE_SUPABASE_ANON_KEY,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
     },
-  },
-});
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
+    },
+  }
+);
 
 // Helper function for real-time subscriptions
 export const subscribeToChanges = (table: string, callback: () => void) => {

@@ -40,7 +40,7 @@ const VerificationOfficerLogin = () => {
       }
 
       // Compare passwords (in a real app, you'd use proper password verification)
-      if (data.password_hash !== password) {
+      if (data.password_text !== password) {
         setError("Invalid credentials");
         setLoading(false);
         return;
@@ -50,6 +50,7 @@ const VerificationOfficerLogin = () => {
       localStorage.setItem("verificationOfficerEmail", email);
       localStorage.setItem("verificationOfficerCourseId", data.course_id);
       localStorage.setItem("verificationOfficerCourseName", data.course_name);
+      localStorage.setItem("adminRole", "verification");
       
       // Update last login time
       await supabase
