@@ -157,6 +157,8 @@ const VerificationAdmin = () => {
   const [verificationAdminCourseId, setVerificationAdminCourseId] = React.useState<string | null>(null);
   const [verificationAdminCourseName, setVerificationAdminCourseName] = React.useState<string | null>(null);
   const [availableCourses, setAvailableCourses] = React.useState<{ id: string; name: string }[]>([]);
+  const [selectedCourse, setSelectedCourse] = React.useState<string | null>(null);
+  const [courses, setCourses] = React.useState<{ id: string; name: string }[]>([]);
 
   React.useEffect(() => {
     const adminRole = localStorage.getItem('adminRole');
@@ -176,25 +178,26 @@ const VerificationAdmin = () => {
           if (error) throw error;
           
           if (data && data.length > 0) {
+            // Add "All Courses" option at the beginning
+            const allCoursesOption = { id: "all", name: "All Courses" };
+            setCourses([allCoursesOption, ...data]);
             setAvailableCourses(data);
-            // By default, select the first course
-            setVerificationAdminCourseId(data[0].id);
-            setVerificationAdminCourseName(data[0].name);
           }
-          
-          // Immediately call fetchStudents after setting state
-          // This will show all students across all courses
-          fetchStudents();
         } catch (err) {
           console.error('Error fetching courses:', err);
+          toast.error('Failed to load courses');
         }
       };
       
       fetchCourses();
     } else if (isVerificationOfficer) {
       // For verification officers, course is already set in localStorage
-      setVerificationAdminCourseId(localStorage.getItem('verificationOfficerCourseId'));
-      setVerificationAdminCourseName(localStorage.getItem('verificationOfficerCourseName'));
+      const courseId = localStorage.getItem('verificationOfficerCourseId');
+      const courseName = localStorage.getItem('verificationOfficerCourseName');
+      if (courseId && courseName) {
+        setCourses([{ id: courseId, name: courseName }]);
+        setSelectedCourse(courseId);
+      }
     }
   }, []);
 
@@ -275,16 +278,14 @@ const VerificationAdmin = () => {
         
         // Log the current mode and course information
         console.log("Verification mode:", isVerificationAdmin ? "Admin" : "Officer");
-        console.log("Course ID filter:", verificationAdminCourseId || verificationOfficerCourseId || "None");
+        console.log("Course ID filter:", selectedCourse || verificationOfficerCourseId || "None");
         
-        // First, let's get all students to debug
-        const { data: allStudents, error: allStudentsError } = await supabase
-          .from("students")
-          .select("id, name, email, status")
-          .order("created_at", { ascending: false });
-          
-        console.log(`Total students in database: ${allStudents?.length || 0}`);
-        
+        if (!selectedCourse && !verificationOfficerCourseId) {
+          setStudents([]);
+          setLoading(false);
+          return;
+        }
+
         // Now do the real query with the necessary joins
         let query = supabase
           .from("students")
@@ -318,13 +319,14 @@ const VerificationAdmin = () => {
         // If it's a verification officer, filter by their assigned course
         if (isVerificationAdmin) {
           // For verification admins, only filter by course if a specific course is selected
-          if (verificationAdminCourseId) {
-            console.log(`Admin filtering for specific course ID: ${verificationAdminCourseId}`);
-            query = query.eq("applications.course_id", verificationAdminCourseId);
+          // and it's not the "All Courses" option
+          if (selectedCourse && selectedCourse !== "all") {
+            console.log(`Admin filtering for specific course ID: ${selectedCourse}`);
+            query = query.eq("applications.course_id", selectedCourse);
           } else {
-            console.log("Admin viewing all courses - no course filter applied");
+            console.log("Admin viewing all courses");
           }
-        } else if (isVerificationOfficer) {
+        } else if (isVerificationOfficer && verificationOfficerCourseId) {
           // For verification officers, always filter by their assigned course
           console.log(`Officer filtering for assigned course: ${verificationOfficerCourseId}`);
           query = query.eq("applications.course_id", verificationOfficerCourseId);
@@ -373,73 +375,10 @@ const VerificationAdmin = () => {
         }
         
         console.log(`Query returned ${studentsData?.length || 0} student records`);
-        console.log("Sample student data:", studentsData?.length ? studentsData[0] : "No data");
 
         // Process students with less filtering
         const validatedStudents = (studentsData || [])
-          .map(student => {
-            try {
-              // Basic validation of required fields
-              if (!student || !student.id || !student.name) {
-                console.log("Skipping student with missing required fields:", student?.id);
-                return null;
-              }
-              
-              // Get application for this student if exists
-              const application = student.applications?.[0];
-              
-              // Handle students with no applications
-              if (!application) {
-                // Only include students without applications when viewing ALL courses
-                if (isVerificationAdmin && !verificationAdminCourseId) {
-                  console.log("Including student with no application (All Courses view):", student.id);
-                  return validateStudent({
-                    ...student,
-                    documents: student.student_documents || [],
-                    status_history: [],
-                    course_id: null,
-                    course_type: null,
-                    course_name: "Not Assigned",
-                  });
-                } else {
-                  // Skip students without applications when course filtering is active
-                  console.log("Skipping student with no application when course filtering is active");
-                  return null;
-                }
-              }
-              
-              // When a specific course is selected (for admin or officer), strictly filter by that course
-              if (verificationAdminCourseId && isVerificationAdmin) {
-                // If student's course ID doesn't match the selected course, skip them
-                if (application.course_id !== verificationAdminCourseId) {
-                  console.log(`Skipping student: course ID ${application.course_id || 'none'} doesn't match selected ${verificationAdminCourseId}`);
-                  return null;
-                }
-              } else if (isVerificationOfficer && verificationOfficerCourseId) {
-                // For verification officers, enforce course filtering
-                if (application.course_id !== verificationOfficerCourseId) {
-                  console.log(`Skipping student: course ID ${application.course_id || 'none'} doesn't match officer's course ${verificationOfficerCourseId}`);
-                  return null;
-                }
-              }
-              
-              return validateStudent({
-                ...student,
-                ...(application?.personal_details || {}),
-                documents: student.student_documents || [],
-                status_history: application?.status_history || [],
-                status: application?.status || student.status || "pending",
-                course_id: application?.course_id || null,
-                course_name: application?.course_name || "Not Assigned",
-                course_type: application?.course_type || null,
-                remarks: application?.remarks || student.remarks,
-                document_verification: application?.document_verification || undefined
-              });
-            } catch (err) {
-              console.error("Error processing student:", student?.id, err);
-              return null;
-            }
-          })
+          .map(student => validateStudent(student))
           .filter(Boolean) as Student[];
 
         console.log(`Filtered to ${validatedStudents.length} valid students`);
@@ -800,133 +739,134 @@ const VerificationAdmin = () => {
     );
   };
 
+  const handleRefresh = () => {
+    fetchStudents();
+  };
+
+  React.useEffect(() => {
+    if (selectedCourse) {
+      fetchStudents();
+    }
+  }, [selectedCourse]);
+
   return (
-    <div className="space-y-4">
-      {isVerificationAdmin && availableCourses.length > 0 && (
-        <div className="flex items-center space-x-2 mb-4">
-          <Label className="whitespace-nowrap">Select Course:</Label>
-          <Select 
-            value={verificationAdminCourseId || ""} 
-            onValueChange={(value) => {
-              // Find the course name from the available courses
-              const courseName = availableCourses.find(c => c.id === value)?.name || "";
-              setVerificationAdminCourseId(value === "all" ? null : value);
-              setVerificationAdminCourseName(value === "all" ? null : courseName);
-            }}
-          >
-            <SelectTrigger className="w-[300px]">
-              <SelectValue placeholder="Select a course to manage" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Courses</SelectItem>
-              {availableCourses.map(course => (
-                <SelectItem key={course.id} value={course.id}>
-                  {course.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-6">
+        {/* Course Selection */}
+        <div>
+          <Label className="text-base font-semibold">Select Course:</Label>
+          <div className="flex gap-4 mt-2">
+            <Select
+              value={selectedCourse || ""}
+              onValueChange={setSelectedCourse}
+            >
+              <SelectTrigger className="w-[300px]">
+                <SelectValue placeholder="Select a course" />
+              </SelectTrigger>
+              <SelectContent>
+                {courses.map(course => (
+                  <SelectItem key={course.id} value={course.id}>
+                    {course.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      )}
 
-      {verificationAdminCourseName && (
-        <h2 className="text-xl font-medium text-gray-800">
-          Manage student applications for {verificationAdminCourseName}
-        </h2>
-      )}
+        {selectedCourse && (
+          <>
+            <div>
+              <h2 className="text-2xl font-bold">
+                Manage student applications for {courses.find(c => c.id === selectedCourse)?.name}
+              </h2>
+            </div>
 
-      <div className="flex justify-between items-center">
-        <div className="relative w-72">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search students..."
-            className="pl-8"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchStudents}
-            disabled={loading}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          {localStorage.getItem('adminRole') === 'verification' && verificationAdminCourseId && (
-            <AssignStudentsButton 
-              courseId={verificationAdminCourseId} 
-              courseName={verificationAdminCourseName || ""}
-            />
-          )}
-        </div>
-      </div>
+            {/* Search and Actions */}
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div className="relative w-96">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
+                  <Input
+                    placeholder="Search students..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleRefresh}
+                  title="Refresh"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              <AssignStudentsButton
+                courseId={selectedCourse}
+                courseName={courses.find(c => c.id === selectedCourse)?.name || ""}
+              />
+            </div>
 
-      {error && (
-        <div className="bg-red-50 text-red-700 p-4 rounded-md my-4">
-          {error}
-        </div>
-      )}
-
-      <div className="border rounded-md">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Course Type</TableHead>
-              <TableHead>Course Name</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-48" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                  <TableCell className="text-right"><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
-                </TableRow>
-              ))
-            ) : filteredStudents.length ? (
-              filteredStudents.map((student) => (
-                <TableRow key={student.id}>
-                  <TableCell className="font-medium">{student.name}</TableCell>
-                  <TableCell>{student.email || "N/A"}</TableCell>
-                  <TableCell>{getCourseCategoryLabel(student.course_type)}</TableCell>
-                  <TableCell>
-                    {student.course_name || "Not Assigned"}
-                  </TableCell>
-                  <TableCell>{getStatusBadge(student.status)}</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => viewStudentDetails(student.id)}
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      View
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
-                  {searchTerm
-                    ? "No students found matching your search."
-                    : "No students available."}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+            {/* Students Table */}
+            <div className="border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Course Type</TableHead>
+                    <TableHead>Course Name</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-48" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : filteredStudents.length > 0 ? (
+                    filteredStudents.map((student) => (
+                      <TableRow key={student.id}>
+                        <TableCell>{student.name}</TableCell>
+                        <TableCell>{student.email}</TableCell>
+                        <TableCell>{student.course_type}</TableCell>
+                        <TableCell>{student.course_name}</TableCell>
+                        <TableCell>{student.status}</TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => viewStudentDetails(student.id)}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-4">
+                        No students available.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
       </div>
 
       {selectedStudent && (

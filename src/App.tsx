@@ -16,6 +16,7 @@ import CourseEditorLogin from "./pages/course-editor-login";
 import CourseEditorDashboard from "./pages/course-editor-dashboard";
 import VerificationAdminManager from "./components/admin/verification/VerificationAdminManager";
 import VerificationOfficerLogin from "./components/auth/VerificationOfficerLogin";
+import VerificationAdminDashboard from "@/app/verification-admin/dashboard/page";
 
 const AboutUs = lazy(() => import("./components/about/AboutUs"));
 const Administration = lazy(
@@ -105,7 +106,7 @@ function App() {
           path="/verification-admin/dashboard"
           element={
             <ProtectedRoute requiredRole="verification">
-              <VerificationAdmin />
+              <VerificationAdminDashboard />
             </ProtectedRoute>
           }
         />

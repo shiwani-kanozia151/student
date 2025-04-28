@@ -13,6 +13,13 @@ import {
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { InfoIcon, Eye, EyeOff } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 interface VerificationAdmin {
   id: string;
@@ -37,6 +44,12 @@ export default function VerificationAdminManager() {
   });
   const [statusMessage, setStatusMessage] = useState({ type: "", message: "" });
   const [visiblePasswords, setVisiblePasswords] = useState<{ [key: string]: boolean }>({});
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [emailDetails, setEmailDetails] = useState({
+    email: "",
+    courseName: "",
+    password: ""
+  });
 
   // Function to generate UUID
   const generateUUID = () => {
@@ -159,6 +172,31 @@ export default function VerificationAdminManager() {
     setStatusMessage({ type: "", message: "" });
   };
 
+  // Function to send invitation email
+  const sendInvitationEmail = (email: string, courseName: string, password: string) => {
+    setEmailDetails({ email, courseName, password });
+    setShowEmailDialog(true);
+  };
+
+  // Function to handle email confirmation
+  const handleEmailConfirmation = () => {
+    const { email, courseName, password } = emailDetails;
+    const subject = encodeURIComponent(`Invitation: Verification Officer for ${courseName}`);
+    const body = encodeURIComponent(
+      `Dear Verification Officer,\n\n` +
+      `You have been invited as a Verification Officer for ${courseName}.\n\n` +
+      `Your login credentials are:\n` +
+      `Email: ${email}\n` +
+      `Password: ${password}\n\n` +
+      `Please login at: ${window.location.origin}/verification-officer/login\n\n` +
+      `Best regards,\nAdmission Portal Team`
+    );
+
+    // Open default email client with pre-filled content
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+    setShowEmailDialog(false);
+  };
+
   const handleAddAdmin = async (e) => {
     e.preventDefault();
     try {
@@ -185,7 +223,7 @@ export default function VerificationAdminManager() {
       const { data, error } = await supabase
         .from("verification_admins")
         .insert([{
-          id: generateUUID(),  // Add UUID for the id field
+          id: generateUUID(),
           email: newAdmin.email.toLowerCase(),
           password_text: newAdmin.password,
           course_id: String(selectedCourse.id),
@@ -198,6 +236,10 @@ export default function VerificationAdminManager() {
       
       console.log("Verification admin added successfully:", data[0]);
       setVerificationAdmins([...verificationAdmins, data[0]]);
+      
+      // Send invitation email
+      sendInvitationEmail(newAdmin.email, selectedCourse.name, newAdmin.password);
+      
       setStatusMessage({
         type: "success",
         message: `Verification admin "${newAdmin.email}" added successfully!`
@@ -420,6 +462,52 @@ export default function VerificationAdminManager() {
           </Table>
         </div>
       </div>
+
+      {/* Email Confirmation Dialog */}
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Verification Officer Added Successfully</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <p className="text-gray-600">A new verification officer has been added for:</p>
+              <p className="font-semibold mt-1 text-lg">{emailDetails.courseName}</p>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+              <p className="font-medium text-gray-900">Login Credentials:</p>
+              <div>
+                <p className="text-sm text-gray-600">Email:</p>
+                <p className="font-mono text-sm">{emailDetails.email}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Password:</p>
+                <p className="font-mono text-sm">{emailDetails.password}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Login URL:</p>
+                <p className="font-mono text-sm break-all">{window.location.origin}/verification-officer/login</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-600">
+              Click "Send Email" to send these credentials to the verification officer.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowEmailDialog(false)}
+            >
+              Close
+            </Button>
+            <Button onClick={handleEmailConfirmation}>
+              Send Email
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 

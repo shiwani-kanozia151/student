@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 
 interface AdminRoleSelectorProps {
-  onRoleSelect: (role: "content" | "verification") => void;
+  onRoleSelect: (role: string) => void;
 }
 
 const AdminRoleSelector = ({ onRoleSelect }: AdminRoleSelectorProps) => {
@@ -37,14 +37,6 @@ const AdminRoleSelector = ({ onRoleSelect }: AdminRoleSelectorProps) => {
           >
             Verification Administrator
           </Button>
-          
-          <Link to="/admin/verification-management" className="block">
-            <Button 
-              className="w-full bg-[#0A2240] hover:bg-[#0A2240]/90 py-8 text-lg"
-            >
-              Verification Officers
-            </Button>
-          </Link>
         </div>
       </div>
     </div>
