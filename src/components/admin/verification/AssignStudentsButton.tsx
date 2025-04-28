@@ -1,238 +1,276 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { toast } from 'sonner';
+import { RefreshCw } from 'lucide-react';
+import { getVerificationOfficers } from '@/app/api/admin/verification-officers';
+import { assignStudentsManually } from '@/app/api/admin/assign-students/manual';
 
 interface AssignStudentsButtonProps {
   courseId: string;
   courseName: string;
 }
 
+interface VerificationOfficer {
+  id: string;
+  email: string;
+  course_id: string;
+  course_name: string;
+}
+
+interface Assignment {
+  officerEmail: string;
+  startIndex: number;
+  endIndex: number;
+  timestamp: Date;
+}
+
 const AssignStudentsButton: React.FC<AssignStudentsButtonProps> = ({ courseId, courseName }) => {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{
-    message: string;
-    stats: {
-      totalStudents: number;
-      officerCount: number;
-      baseStudentsPerOfficer: number;
-      officersWithExtraStudent: number;
-    } | null;
-  } | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [verificationOfficers, setVerificationOfficers] = useState<VerificationOfficer[]>([]);
+  const [selectedOfficer, setSelectedOfficer] = useState('');
+  const [startIndex, setStartIndex] = useState('');
+  const [endIndex, setEndIndex] = useState('');
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
 
-  const assignStudents = async () => {
+  const fetchVerificationOfficers = async () => {
     try {
-      setLoading(true);
-      setError(null);
-      setSuccess(null);
-
-      // Get count of verification officers for this course
-      const { data: officers, error: officersError } = await supabase
-        .from('verification_admins')
-        .select('id, email')
-        .eq('course_id', courseId);
-
-      if (officersError) {
-        throw new Error(`Error checking verification officers: ${officersError.message}`);
-      }
-
-      if (!officers || officers.length === 0) {
-        throw new Error(`No verification officers found for ${courseName}. Please add at least one verification officer before assigning students.`);
-      }
-
-      // Directly implement the assignment logic in the component:
-
-      // 1. Create the student_assignments table if it doesn't exist
-      try {
-        // Check if the table exists by attempting to select from it
-        await supabase.from('student_assignments').select('id').limit(1);
-      } catch (error) {
-        // If the table doesn't exist, create it
-        if (error.message.includes('does not exist')) {
-          const sql = `
-            CREATE TABLE IF NOT EXISTS public.student_assignments (
-              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-              student_id UUID NOT NULL,
-              verification_officer_id UUID NOT NULL,
-              course_id VARCHAR NOT NULL,
-              assigned_at TIMESTAMPTZ DEFAULT NOW(),
-              assigned_by VARCHAR,
-              UNIQUE(student_id)
-            );
-            
-            CREATE INDEX IF NOT EXISTS idx_student_assignments_student_id 
-            ON public.student_assignments(student_id);
-            
-            CREATE INDEX IF NOT EXISTS idx_student_assignments_verification_officer_id 
-            ON public.student_assignments(verification_officer_id);
-            
-            CREATE INDEX IF NOT EXISTS idx_student_assignments_course_id 
-            ON public.student_assignments(course_id);
-          `;
-          
-          try {
-            const { error: sqlError } = await supabase.rpc('exec_sql', { sql_query: sql });
-            if (sqlError) throw sqlError;
-          } catch (rpcError) {
-            console.error('Table creation error:', rpcError);
-            throw new Error(`Failed to create student_assignments table: ${rpcError.message}`);
-          }
-        } else {
-          throw error;
-        }
-      }
-      
-      // 2. Get all applications for this course
-      const { data: applications, error: appError } = await supabase
-        .from('applications')
-        .select('student_id, course_id, course_name, course_type')
-        .eq('course_id', courseId);
-      
-      if (appError) {
-        throw new Error(`Error fetching applications: ${appError.message}`);
-      }
-      
-      if (!applications || applications.length === 0) {
-        throw new Error(`No applications found for ${courseName}.`);
-      }
-      
-      // 3. Get student details from these applications
-      const studentIds = applications.map(app => app.student_id);
-      
-      const { data: students, error: studentError } = await supabase
-        .from('students')
-        .select('id, name, email')
-        .in('id', studentIds);
-      
-      if (studentError) {
-        throw new Error(`Error fetching students: ${studentError.message}`);
-      }
-      
-      if (!students || students.length === 0) {
-        throw new Error(`No student records found for the applications.`);
-      }
-      
-      // 4. Create combined student records with their applications
-      const courseStudents = students.map(student => ({
-        id: student.id,
-        name: student.name,
-        email: student.email,
-        applications: applications.filter(app => app.student_id === student.id)
+      console.log('Fetching verification officers for course:', courseId);
+      const officers = await getVerificationOfficers(courseId);
+      console.log('Received verification officers:', officers);
+      // Transform the data to match the VerificationOfficer interface
+      const transformedOfficers: VerificationOfficer[] = officers.map(officer => ({
+        id: officer.id,
+        email: officer.email,
+        course_id: courseId,
+        course_name: courseName
       }));
-      
-      // 5. Delete existing assignments for this course
-      const { error: deleteError } = await supabase
-        .from('student_assignments')
-        .delete()
-        .eq('course_id', courseId);
-      
-      if (deleteError && !deleteError.message.includes('does not exist')) {
-        throw new Error(`Error clearing existing assignments: ${deleteError.message}`);
-      }
-      
-      // 6. Distribute students among verification officers
-      const officerCount = officers.length;
-      const studentsPerOfficer = Math.floor(courseStudents.length / officerCount);
-      const extraStudents = courseStudents.length % officerCount;
-      
-      const assignmentsToInsert = [];
-      
-      for (let i = 0; i < officerCount; i++) {
-        // Calculate how many students this officer gets
-        const studentCount = i < extraStudents ? studentsPerOfficer + 1 : studentsPerOfficer;
-        
-        // Determine which students to assign
-        const startIndex = i < extraStudents 
-          ? i * (studentsPerOfficer + 1) 
-          : (extraStudents * (studentsPerOfficer + 1)) + ((i - extraStudents) * studentsPerOfficer);
-        
-        // Create assignments for each student
-        for (let j = 0; j < studentCount; j++) {
-          const studentIndex = startIndex + j;
-          if (studentIndex < courseStudents.length) {
-            assignmentsToInsert.push({
-              student_id: courseStudents[studentIndex].id,
-              verification_officer_id: officers[i].id,
-              course_id: courseId,
-              assigned_at: new Date().toISOString(),
-              assigned_by: 'system'
-            });
-          }
+      setVerificationOfficers(transformedOfficers);
+      setFetchError(null);
+    } catch (error) {
+      console.error('Error fetching verification officers:', error);
+      setFetchError(error instanceof Error ? error.message : 'Failed to fetch verification officers');
+      toast.error('Failed to fetch verification officers');
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && courseId) {
+      fetchVerificationOfficers();
+    }
+  }, [isOpen, courseId]);
+
+  const handleOpen = () => {
+    setIsOpen(true);
+  };
+
+  const handleClose = () => {
+    setIsOpen(false);
+    setSelectedOfficer('');
+    setStartIndex('');
+    setEndIndex('');
+    setFetchError(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOfficer || !startIndex || !endIndex) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    const start = parseInt(startIndex);
+    const end = parseInt(endIndex);
+
+    if (isNaN(start) || isNaN(end) || start < 1 || end < start) {
+      toast.error('Please enter valid start and end indices');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await assignStudentsManually(
+        courseId,
+        selectedOfficer,
+        start,
+        end
+      );
+
+      if (result.success) {
+        const officer = verificationOfficers.find(o => o.id === selectedOfficer);
+        if (officer) {
+          // Add new assignment to the list
+          const newAssignment: Assignment = {
+            officerEmail: selectedOfficer,
+            startIndex: start,
+            endIndex: end,
+            timestamp: new Date()
+          };
+          setAssignments(prev => [newAssignment, ...prev]);
+
+          // Show success message with details
+          toast.success(
+            <div className="space-y-2">
+              <p>Students assigned successfully!</p>
+              <p className="text-sm">
+                Officer: {officer.email}<br />
+                Range: {start} to {end}
+              </p>
+            </div>
+          );
         }
-      }
-      
-      // 7. Insert the new assignments
-      if (assignmentsToInsert.length > 0) {
-        const { error: insertError } = await supabase
-          .from('student_assignments')
-          .insert(assignmentsToInsert);
-          
-        if (insertError) {
-          throw new Error(`Error creating assignments: ${insertError.message}`);
-        }
+        handleClose();
       } else {
-        throw new Error("No student assignments could be created.");
+        toast.error(result.error || 'Failed to assign students');
       }
-      
-      // 8. Set success response
-      setSuccess({
-        message: `Successfully assigned ${assignmentsToInsert.length} students to ${officers.length} verification officers`,
-        stats: {
-          totalStudents: courseStudents.length,
-          officerCount: officerCount,
-          baseStudentsPerOfficer: studentsPerOfficer,
-          officersWithExtraStudent: extraStudents
-        }
-      });
-    } catch (err: any) {
-      console.error('Error assigning students:', err);
-      setError(err.message || 'An unexpected error occurred');
+    } catch (error) {
+      console.error('Error assigning students:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to assign students');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="space-y-4">
-      <Button 
-        onClick={assignStudents} 
-        disabled={loading}
-        className="w-full"
-      >
-        {loading ? (
-          <>
-            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-            Assigning Students...
-          </>
-        ) : (
-          'Distribute Students to Verification Officers'
-        )}
-      </Button>
+    <div className="flex flex-col">
+      <div>
+        <Button 
+          onClick={handleOpen}
+          className="bg-blue-900 text-white hover:bg-blue-800"
+        >
+          Manual Assignment
+        </Button>
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {success && (
-        <Alert className="bg-green-50 border-green-200 text-green-800">
-          <CheckCircle className="h-4 w-4" />
-          <AlertDescription className="space-y-2">
-            <p>{success.message}</p>
-            {success.stats && (
-              <div className="text-sm">
-                <p>Total Students: {success.stats.totalStudents}</p>
-                <p>Number of Verification Officers: {success.stats.officerCount}</p>
-                <p>Base Students Per Officer: {success.stats.baseStudentsPerOfficer}</p>
-                <p>Officers With Extra Student: {success.stats.officersWithExtraStudent}</p>
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Manual Assignment</DialogTitle>
+            </DialogHeader>
+            
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="w-full">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Verification Officer
+                </label>
+                {fetchError ? (
+                  <div className="text-red-500 text-sm mb-2">{fetchError}</div>
+                ) : verificationOfficers.length === 0 ? (
+                  <div className="text-gray-500 text-sm mb-2">No verification officers found for this course</div>
+                ) : (
+                  <select
+                    value={selectedOfficer}
+                    onChange={(e) => setSelectedOfficer(e.target.value)}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Choose an officer</option>
+                    {verificationOfficers.map((officer) => (
+                      <option key={officer.id} value={officer.id}>
+                        {officer.email}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
-            )}
-          </AlertDescription>
-        </Alert>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Start Index
+                  </label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={startIndex}
+                    onChange={(e) => setStartIndex(e.target.value)}
+                    required
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    End Index
+                  </label>
+                  <Input
+                    type="number"
+                    min={startIndex}
+                    value={endIndex}
+                    onChange={(e) => setEndIndex(e.target.value)}
+                    required
+                    className="w-full"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-8">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleClose}
+                  disabled={loading}
+                  className="px-6"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={loading || !selectedOfficer || !startIndex || !endIndex || verificationOfficers.length === 0}
+                  className="bg-blue-900 text-white hover:bg-blue-800 px-6"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Assigning...
+                    </>
+                  ) : (
+                    'Assign Students'
+                  )}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {assignments.length > 0 && (
+        <div className="mt-8 pt-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Assignment History</h2>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              className="flex items-center gap-2"
+              onClick={fetchVerificationOfficers}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {assignments.map((assignment, index) => {
+              const officer = verificationOfficers.find(o => o.id === assignment.officerEmail);
+              return (
+                <div key={index} className="flex items-center justify-between py-3 px-4 bg-white rounded-sm hover:bg-gray-50 border">
+                  <div className="text-blue-900 font-medium">
+                    {officer?.email || assignment.officerEmail}
+                  </div>
+                  <div className="flex items-center gap-8">
+                    <span className="text-gray-600">
+                      Students {assignment.startIndex} - {assignment.endIndex}
+                    </span>
+                    <span className="text-gray-400 text-sm">
+                      {new Date(assignment.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
     </div>
   );

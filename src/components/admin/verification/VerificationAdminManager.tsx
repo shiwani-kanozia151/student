@@ -12,11 +12,21 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { InfoIcon } from "lucide-react";
+import { InfoIcon, Eye, EyeOff } from "lucide-react";
+
+interface VerificationAdmin {
+  id: string;
+  email: string;
+  password_text: string;
+  course_id: string;
+  course_name: string;
+  last_login: string | null;
+  created_at: string;
+}
 
 export default function VerificationAdminManager() {
   const [courses, setCourses] = useState([]);
-  const [verificationAdmins, setVerificationAdmins] = useState([]);
+  const [verificationAdmins, setVerificationAdmins] = useState<VerificationAdmin[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [newAdmin, setNewAdmin] = useState({
@@ -26,6 +36,24 @@ export default function VerificationAdminManager() {
     course_name: ""
   });
   const [statusMessage, setStatusMessage] = useState({ type: "", message: "" });
+  const [visiblePasswords, setVisiblePasswords] = useState<{ [key: string]: boolean }>({});
+
+  // Function to generate UUID
+  const generateUUID = () => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
+  // Toggle password visibility for a specific admin
+  const togglePasswordVisibility = (adminId: string) => {
+    setVisiblePasswords(prev => ({
+      ...prev,
+      [adminId]: !prev[adminId]
+    }));
+  };
 
   // Fetch courses and verification admins
   useEffect(() => {
@@ -87,7 +115,7 @@ export default function VerificationAdminManager() {
           CREATE TABLE IF NOT EXISTS public.verification_admins (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             email VARCHAR NOT NULL UNIQUE,
-            password_hash VARCHAR NOT NULL,
+            password_text VARCHAR NOT NULL,
             course_id VARCHAR NOT NULL,
             course_name VARCHAR NOT NULL,
             created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -150,17 +178,16 @@ export default function VerificationAdminManager() {
         return;
       }
       
-      // Create the table if it doesn't exist
       await createTableIfNotExists();
       
       console.log("Adding verification admin for course:", selectedCourse);
       
-      // In a real app, you would hash the password
       const { data, error } = await supabase
         .from("verification_admins")
         .insert([{
+          id: generateUUID(),  // Add UUID for the id field
           email: newAdmin.email.toLowerCase(),
-          password_hash: newAdmin.password, // In production, use proper hashing
+          password_text: newAdmin.password,
           course_id: String(selectedCourse.id),
           course_name: selectedCourse.name,
           created_at: new Date().toISOString()
@@ -176,7 +203,6 @@ export default function VerificationAdminManager() {
         message: `Verification admin "${newAdmin.email}" added successfully!`
       });
       
-      // Reset form
       setNewAdmin({
         email: "",
         password: "",
@@ -188,7 +214,7 @@ export default function VerificationAdminManager() {
       console.error("Error adding verification admin:", err);
       setStatusMessage({
         type: "error",
-        message: err.message || "Failed to add verification admin"
+        message: "Failed to add verification admin: " + err.message
       });
     }
   };
@@ -349,11 +375,28 @@ export default function VerificationAdminManager() {
                   <TableRow key={admin.id}>
                     <TableCell>{admin.email}</TableCell>
                     <TableCell>{admin.course_name}</TableCell>
-                    <TableCell>{admin.password_hash}</TableCell>
+                    <TableCell className="relative">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-mono">
+                          {visiblePasswords[admin.id] ? admin.password_text : '••••••••'}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => togglePasswordVisibility(admin.id)}
+                          className="h-8 w-8 p-0"
+                          title={visiblePasswords[admin.id] ? "Hide password" : "Show password"}
+                        >
+                          {visiblePasswords[admin.id] ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </TableCell>
                     <TableCell>
-                      {admin.last_login 
-                        ? new Date(admin.last_login).toLocaleDateString() 
-                        : "Never"}
+                      {admin.last_login ? new Date(admin.last_login).toLocaleDateString() : 'Never'}
                     </TableCell>
                     <TableCell>
                       <Button 

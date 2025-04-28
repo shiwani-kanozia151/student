@@ -5,13 +5,17 @@ import { Label } from "@/components/ui/label";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 const VerificationOfficerLogin = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [courseId, setCourseId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -23,39 +27,41 @@ const VerificationOfficerLogin = () => {
     try {
       if (!email || !password) {
         setError("Please enter both email and password");
+        setLoading(false);
         return;
       }
 
-      // Fetch the verification admin from the database
-      const { data, error: fetchError } = await supabase
-        .from("verification_admins")
-        .select("*")
-        .eq("email", email.toLowerCase())
+      // Get the verification admin from the database
+      const { data: admin, error: fetchError } = await supabase
+        .from('verification_admins')
+        .select('*')
+        .eq('email', email.toLowerCase())
         .single();
 
-      if (fetchError || !data) {
+      if (fetchError || !admin) {
+        console.error("Fetch error:", fetchError);
         setError("Invalid credentials");
         setLoading(false);
         return;
       }
 
-      // Compare passwords (in a real app, you'd use proper password verification)
-      if (data.password_hash !== password) {
+      // Compare the password
+      if (admin.password_text !== password) {
         setError("Invalid credentials");
         setLoading(false);
         return;
       }
+
+      // Update last login time
+      await supabase
+        .from('verification_admins')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', admin.id);
 
       // Store verification officer info in localStorage
       localStorage.setItem("verificationOfficerEmail", email);
-      localStorage.setItem("verificationOfficerCourseId", data.course_id);
-      localStorage.setItem("verificationOfficerCourseName", data.course_name);
-      
-      // Update last login time
-      await supabase
-        .from("verification_admins")
-        .update({ last_login: new Date().toISOString() })
-        .eq("id", data.id);
+      localStorage.setItem("verificationOfficerCourseId", admin.course_id);
+      localStorage.setItem("verificationOfficerCourseName", admin.course_name);
       
       // Redirect to dashboard
       navigate("/verification-officer/dashboard");
@@ -81,7 +87,7 @@ const VerificationOfficerLogin = () => {
           </Alert>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
