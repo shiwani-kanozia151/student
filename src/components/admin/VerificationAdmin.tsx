@@ -271,122 +271,86 @@ const VerificationAdmin = () => {
         setLoading(true);
         setError(null);
 
-        // Check if user is a verification officer (using localStorage)
-        const isVerificationOfficer = localStorage.getItem('verificationOfficerEmail') !== null;
-        const verificationOfficerEmail = localStorage.getItem('verificationOfficerEmail');
-        const verificationOfficerCourseId = localStorage.getItem('verificationOfficerCourseId');
-        
-        // Log the current mode and course information
-        console.log("Verification mode:", isVerificationAdmin ? "Admin" : "Officer");
-        console.log("Course ID filter:", selectedCourse || verificationOfficerCourseId || "None");
-        
-        if (!selectedCourse && !verificationOfficerCourseId) {
-          setStudents([]);
-          setLoading(false);
-          return;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          throw new Error('No active session');
         }
 
-        // Now do the real query with the necessary joins
         let query = supabase
-          .from("students")
+          .from('students')
           .select(`
             *,
-            student_documents!student_id(
+            applications (
               id,
-              type,
-              url,
-              name,
-              uploaded_at,
-              application_id
-            ),
-            applications!left(
-              id,
-              personal_details,
-              academic_details,
               course_id,
               course_type,
               course_name,
               status,
-              remarks,
-              status_history,
+              personal_details,
+              academic_details,
               document_verification,
-              created_at
+              status_history
+            ),
+            student_documents (
+              id,
+              type,
+              url,
+              name,
+              uploaded_at
             )
-          `)
-          .order("created_at", { ascending: false });
+          `);
 
-        // If this is a verification admin, they can see ALL students across ALL courses
-        // If it's a verification officer, filter by their assigned course
-        if (isVerificationAdmin) {
-          // For verification admins, only filter by course if a specific course is selected
-          // and it's not the "All Courses" option
-          if (selectedCourse && selectedCourse !== "all") {
-            console.log(`Admin filtering for specific course ID: ${selectedCourse}`);
-            query = query.eq("applications.course_id", selectedCourse);
-          } else {
-            console.log("Admin viewing all courses");
-          }
-        } else if (isVerificationOfficer && verificationOfficerCourseId) {
-          // For verification officers, always filter by their assigned course
-          console.log(`Officer filtering for assigned course: ${verificationOfficerCourseId}`);
-          query = query.eq("applications.course_id", verificationOfficerCourseId);
+        const { data, error } = await query;
+
+        if (error) {
+          console.error('Error fetching students:', error);
+          setError(error.message);
+        } else {
+          console.log('Fetched students:', data);
           
-          // First, get the verification officer's ID
-          const { data: officerData, error: officerError } = await supabase
-            .from("verification_admins")
-            .select("id")
-            .eq("email", verificationOfficerEmail)
-            .single();
+          // Process and filter students
+          const processedStudents = (data || []).map(student => {
+            // Get the first application (if any)
+            const application = student.applications?.[0];
+            
+            return {
+              ...student,
+              ...(application?.personal_details || {}),
+              documents: student.student_documents || [],
+              status_history: application?.status_history || [],
+              status: application?.status || student.status,
+              remarks: application?.remarks || student.remarks,
+              document_verification: application?.document_verification || undefined,
+              course_id: application?.course_id || null,
+              course_type: application?.course_type || null,
+              course_name: application?.course_name || null
+            };
+          });
 
-          if (officerError) {
-            throw new Error(`Failed to get verification officer details: ${officerError.message}`);
-          }
-          
-          if (!officerData || !officerData.id) {
-            throw new Error("Verification officer ID not found");
-          }
+          // Filter students based on selected course
+          const filteredStudents = processedStudents.filter(student => {
+            if (!selectedCourse || selectedCourse === 'all') {
+              // For "All Courses", only show students without a course assigned
+              return true;
+            } else {
+              // For specific course selection, only show students in that course
+              return student.course_id === selectedCourse;
+            }
+          });
 
-          // Get assigned students for this officer
-          const { data: assignedStudents, error: assignmentError } = await supabase
-            .from("student_assignments")
-            .select("student_id")
-            .eq("verification_officer_id", officerData.id)
-            .eq("course_id", verificationOfficerCourseId);
+          // Validate and set the filtered students
+          const validStudents = filteredStudents
+            .map(student => validateStudent(student))
+            .filter(Boolean);
 
-          if (assignmentError && !assignmentError.message.includes("does not exist")) {
-            throw new Error(`Error fetching student assignments: ${assignmentError.message}`);
-          }
-
-          // Create an array of student IDs assigned to this officer
-          const assignedStudentIds = (assignedStudents || []).map(assignment => assignment.student_id);
-
-          // If we have assigned students, only get those specific students
-          if (assignedStudents && assignedStudents.length > 0) {
-            console.log(`Filtering for ${assignedStudentIds.length} assigned students`);
-            query = query.in("id", assignedStudentIds);
-          }
+          setStudents(validStudents);
         }
-
-        const { data: studentsData, error: studentsError } = await query;
-
-        if (studentsError) {
-          console.error("Error fetching students data:", studentsError);
-          throw studentsError;
-        }
-        
-        console.log(`Query returned ${studentsData?.length || 0} student records`);
-
-        // Process students with less filtering
-        const validatedStudents = (studentsData || [])
-          .map(student => validateStudent(student))
-          .filter(Boolean) as Student[];
-
-        console.log(`Filtered to ${validatedStudents.length} valid students`);
-        setStudents(validatedStudents);
       } catch (err) {
-        console.error("Error fetching students:", err);
-        setError(err instanceof Error ? err.message : "Failed to load students");
-        toast.error("Failed to load students");
+        console.error('Unexpected error:', err);
+        setError('Failed to load students');
+        if (err.message === 'No active session') {
+          window.location.href = '/verification-admin/login';
+        }
       } finally {
         setLoading(false);
       }
