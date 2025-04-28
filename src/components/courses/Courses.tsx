@@ -24,63 +24,70 @@ const isCourseAdmin = adminRole === "course";
 
 const Courses = () => {
   const [courses, setCourses] = useState<Course[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
 
   const fetchCourses = async () => {
+    // Don't fetch if already loading
+    if (isLoading) {
+      console.log('[DEBUG] Skipping fetch - already loading');
+      return;
+    }
+
     try {
-      setLoading(true);
-      console.log("[DEBUG] Fetching courses from Supabase...");
-      
+      setIsLoading(true);
       const { data, error } = await supabase
-        .from("courses")
-        .select("*")
-        .order("name");
+        .from('courses')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      
-      console.log("[DEBUG] Raw course data:", data);
-      
-      const visibleCourses = (data || []).filter(course => {
-        const isVisible = course.is_active !== false;
-        if (!isVisible) {
-          console.log(`[DEBUG] Filtered out inactive course: ${course.name} (ID: ${course.id})`);
-        }
-        return isVisible;
-      });
+      if (error) {
+        console.error('Error fetching courses:', error);
+        return;
+      }
 
-      console.log("[DEBUG] Visible courses:", visibleCourses);
-      setCourses(visibleCourses);
-    } catch (error) {
-      console.error("Failed to fetch courses:", error);
+      setCourses(data || []);
+    } catch (err) {
+      console.error('Error in fetchCourses:', err);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  useEffect(() => {
+  useEffect((): (() => void) => {
     fetchCourses();
 
-    const channel = supabase
-      .channel("courses_realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "courses",
+    const subscription = supabase
+      .channel('courses-changes')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'courses' 
         },
-        () => {
-          console.log("[DEBUG] Course change detected - refreshing...");
-          fetchCourses();
+        async (payload) => {
+          console.log('[DEBUG] Received course change:', payload);
+
+          // Add delay to ensure DB has processed the change
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Only fetch if we're not already loading
+          if (!isLoading) {
+            console.log('[DEBUG] Fetching fresh course data after change');
+            await fetchCourses();
+          } else {
+            console.log('[DEBUG] Skipping fetch - already loading');
+          }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[DEBUG] Subscription status:', status);
+      });
 
     return () => {
-      supabase.removeChannel(channel);
+      subscription.unsubscribe();
     };
-  }, []);
+  }, []); // Only run on mount
 
   // Enhanced course grouping with all program types
   const groupedCourses = {
@@ -105,7 +112,7 @@ const Courses = () => {
   };
 
   useEffect(() => {
-    if (!loading) {
+    if (!isLoading) {
       console.log("[DEBUG] Grouped courses:", {
         btech: groupedCourses.btech,
         mtech: groupedCourses.mtech,
@@ -117,9 +124,9 @@ const Courses = () => {
         [...new Set(courses.map(c => c.type))]
       );
     }
-  }, [loading, groupedCourses, courses]);
+  }, [isLoading, groupedCourses, courses]);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A2240]"></div>

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { RefreshCw } from 'lucide-react';
 import { getVerificationOfficers } from '@/app/api/admin/verification-officers';
 import { assignStudentsManually } from '@/app/api/admin/assign-students/manual';
+import { supabase } from '@/lib/supabase';
 
 interface AssignStudentsButtonProps {
   courseId: string;
@@ -35,13 +36,31 @@ const AssignStudentsButton: React.FC<AssignStudentsButtonProps> = ({ courseId, c
   const [endIndex, setEndIndex] = useState('');
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [totalStudents, setTotalStudents] = useState<number>(0);
+
+  const fetchTotalStudents = async () => {
+    try {
+      // First get all students with their applications for this course
+      const { data, error } = await supabase
+        .from('applications')
+        .select('student_id', { count: 'exact' })
+        .eq('course_id', courseId);
+
+      if (error) throw error;
+
+      console.log('Total students query result:', { data, count: data?.length });
+      setTotalStudents(data?.length || 0);
+    } catch (error) {
+      console.error('Error fetching total students:', error);
+      toast.error('Failed to fetch total students count');
+    }
+  };
 
   const fetchVerificationOfficers = async () => {
     try {
       console.log('Fetching verification officers for course:', courseId);
       const officers = await getVerificationOfficers(courseId);
       console.log('Received verification officers:', officers);
-      // Transform the data to match the VerificationOfficer interface
       const transformedOfficers: VerificationOfficer[] = officers.map(officer => ({
         id: officer.id,
         email: officer.email,
@@ -60,6 +79,7 @@ const AssignStudentsButton: React.FC<AssignStudentsButtonProps> = ({ courseId, c
   useEffect(() => {
     if (isOpen && courseId) {
       fetchVerificationOfficers();
+      fetchTotalStudents();
     }
   }, [isOpen, courseId]);
 
@@ -90,6 +110,11 @@ const AssignStudentsButton: React.FC<AssignStudentsButtonProps> = ({ courseId, c
       return;
     }
 
+    if (start < 1 || end > totalStudents) {
+      toast.error(`Please enter indices between 1 and ${totalStudents}`);
+      return;
+    }
+
     setLoading(true);
     try {
       const result = await assignStudentsManually(
@@ -102,22 +127,20 @@ const AssignStudentsButton: React.FC<AssignStudentsButtonProps> = ({ courseId, c
       if (result.success) {
         const officer = verificationOfficers.find(o => o.id === selectedOfficer);
         if (officer) {
-          // Add new assignment to the list
           const newAssignment: Assignment = {
-            officerEmail: selectedOfficer,
+            officerEmail: officer.email,
             startIndex: start,
             endIndex: end,
             timestamp: new Date()
           };
           setAssignments(prev => [newAssignment, ...prev]);
 
-          // Show success message with details
           toast.success(
             <div className="space-y-2">
               <p>Students assigned successfully!</p>
               <p className="text-sm">
                 Officer: {officer.email}<br />
-                Range: {start} to {end}
+                Range: {start} to {end} of {totalStudents} students
               </p>
             </div>
           );
@@ -176,14 +199,19 @@ const AssignStudentsButton: React.FC<AssignStudentsButtonProps> = ({ courseId, c
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="text-sm text-gray-500">
+                  Total students in this course: {totalStudents}
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Start Index
+                    Start Index (1-{totalStudents})
                   </label>
                   <Input
                     type="number"
                     min={1}
+                    max={totalStudents}
                     value={startIndex}
                     onChange={(e) => setStartIndex(e.target.value)}
                     required
@@ -193,11 +221,12 @@ const AssignStudentsButton: React.FC<AssignStudentsButtonProps> = ({ courseId, c
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    End Index
+                    End Index (1-{totalStudents})
                   </label>
                   <Input
                     type="number"
-                    min={startIndex}
+                    min={startIndex || 1}
+                    max={totalStudents}
                     value={endIndex}
                     onChange={(e) => setEndIndex(e.target.value)}
                     required
@@ -252,7 +281,7 @@ const AssignStudentsButton: React.FC<AssignStudentsButtonProps> = ({ courseId, c
           </div>
           <div className="space-y-2">
             {assignments.map((assignment, index) => {
-              const officer = verificationOfficers.find(o => o.id === assignment.officerEmail);
+              const officer = verificationOfficers.find(o => o.email === assignment.officerEmail);
               return (
                 <div key={index} className="flex items-center justify-between py-3 px-4 bg-white rounded-sm hover:bg-gray-50 border">
                   <div className="text-blue-900 font-medium">
@@ -260,7 +289,7 @@ const AssignStudentsButton: React.FC<AssignStudentsButtonProps> = ({ courseId, c
                   </div>
                   <div className="flex items-center gap-8">
                     <span className="text-gray-600">
-                      Students {assignment.startIndex} - {assignment.endIndex}
+                      Students {assignment.startIndex} - {assignment.endIndex} of {totalStudents}
                     </span>
                     <span className="text-gray-400 text-sm">
                       {new Date(assignment.timestamp).toLocaleTimeString()}

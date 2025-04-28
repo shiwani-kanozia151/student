@@ -12,6 +12,13 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Eye, EyeOff } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function CourseEditorManager() {
   const [courses, setCourses] = useState([]);
@@ -25,6 +32,7 @@ export default function CourseEditorManager() {
     course_name: ""
   });
   const [statusMessage, setStatusMessage] = useState({ type: "", message: "" });
+  const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
 
   // Fetch courses and editors
   useEffect(() => {
@@ -41,20 +49,30 @@ export default function CourseEditorManager() {
         if (coursesError) throw coursesError;
         setCourses(coursesData || []);
         
-        // Check if course_editors table exists
-        await createTableIfNotExists();
-        
-        // Fetch editors
+        // Check if course_editors table exists and fetch editors
         const { data: editorsData, error: editorsError } = await supabase
           .from("course_editors")
-          .select("*")
-          .order("created_at", { ascending: false });
+          .select("*");
+
+        console.log('Editors fetch response:', { data: editorsData, error: editorsError }); // Debug log
           
-        if (editorsError && !editorsError.message.includes("does not exist")) {
-          throw editorsError;
+        if (editorsError) {
+          // If table doesn't exist, create it
+          if (editorsError.message.includes("does not exist")) {
+            await createTableIfNotExists();
+            // Try fetching again after creating table
+            const { data: retryData, error: retryError } = await supabase
+              .from("course_editors")
+              .select("*");
+              
+            if (retryError) throw retryError;
+            setEditors(retryData || []);
+          } else {
+            throw editorsError;
+          }
+        } else {
+          setEditors(editorsData || []);
         }
-        
-        setEditors(editorsData || []);
         
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -154,19 +172,26 @@ export default function CourseEditorManager() {
       
       console.log("Adding editor for course:", selectedCourse);
       
-      // In a real app, you would hash the password
+      // Prepare the editor data
+      const editorData = {
+        email: newEditor.email.toLowerCase(),
+        password: newEditor.password,
+        course_id: selectedCourse.id.toString(),
+        course_name: selectedCourse.name,
+        created_at: new Date().toISOString()
+      };
+
+      console.log("Editor data to insert:", editorData);
+      
       const { data, error } = await supabase
         .from("course_editors")
-        .insert([{
-          email: newEditor.email.toLowerCase(),
-          password_hash: newEditor.password, // In production, use proper hashing
-          course_id: String(selectedCourse.id),
-          course_name: selectedCourse.name,
-          created_at: new Date().toISOString()
-        }])
+        .insert([editorData])
         .select();
         
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase error:", error);
+        throw error;
+      }
       
       console.log("Editor added successfully:", data[0]);
       setEditors([...editors, data[0]]);
@@ -179,7 +204,7 @@ export default function CourseEditorManager() {
       setNewEditor({
         email: "",
         password: "",
-        course_id: String(selectedCourse.id),
+        course_id: selectedCourse.id.toString(),
         course_name: selectedCourse.name
       });
       
@@ -223,6 +248,14 @@ export default function CourseEditorManager() {
     // Check if this course has any editors assigned to it
     return !editors.some(editor => editor.course_id === String(course.id));
   });
+
+  // Update the password visibility toggle function
+  const togglePasswordVisibility = (editorId: string) => {
+    setShowPasswords(prev => ({
+      ...prev,
+      [editorId]: !prev[editorId]
+    }));
+  };
 
   return (
     <div className="space-y-6">
@@ -329,6 +362,7 @@ export default function CourseEditorManager() {
               <TableRow>
                 <TableHead>Email</TableHead>
                 <TableHead>Course</TableHead>
+                <TableHead>Password</TableHead>
                 <TableHead>Last Login</TableHead>
                 <TableHead>Action</TableHead>
               </TableRow>
@@ -339,15 +373,43 @@ export default function CourseEditorManager() {
                   <TableRow key={editor.id}>
                     <TableCell>{editor.email}</TableCell>
                     <TableCell>{editor.course_name}</TableCell>
-                    <TableCell>
-                      {editor.last_login 
-                        ? new Date(editor.last_login).toLocaleDateString() 
-                        : "Never"}
+                    <TableCell className="relative">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono">
+                          {showPasswords[editor.id] ? editor.password : '••••••••'}
+                        </span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 p-0"
+                                onClick={() => togglePasswordVisibility(editor.id)}
+                              >
+                                {showPasswords[editor.id] ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {showPasswords[editor.id] ? 'Hide password' : 'Show password'}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                     </TableCell>
                     <TableCell>
-                      <Button 
-                        size="sm" 
+                      {editor.last_login 
+                        ? new Date(editor.last_login).toLocaleDateString()
+                        : 'Never'}
+                    </TableCell>
+                    <TableCell>
+                      <Button
                         variant="destructive"
+                        size="sm"
                         onClick={() => handleDeleteEditor(editor.id)}
                       >
                         Delete
@@ -357,8 +419,8 @@ export default function CourseEditorManager() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-4">
-                    No course editors added yet
+                  <TableCell colSpan={5} className="text-center py-4">
+                    No course editors found
                   </TableCell>
                 </TableRow>
               )}

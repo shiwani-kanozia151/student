@@ -1,9 +1,9 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
 
 export default function CourseEditorLogin() {
   const navigate = useNavigate();
@@ -23,7 +23,7 @@ export default function CourseEditorLogin() {
         .from('course_editors')
         .select('*')
         .eq('email', credentials.email.toLowerCase())
-        .eq('password', credentials.password)
+        .eq('password_hash', credentials.password) // In production, use proper password hashing
         .single();
 
       if (editorError || !editorData) {
@@ -43,7 +43,7 @@ export default function CourseEditorLogin() {
         .eq('id', editorData.id);
 
       toast.success('Login successful!');
-      navigate('/course-editor-dashboard');
+      navigate('/course-editor/dashboard');
     } catch (error) {
       console.error('Login error:', error);
       toast.error('Invalid email or password');
@@ -107,4 +107,4 @@ export default function CourseEditorLogin() {
       </div>
     </div>
   );
-}
+} 
