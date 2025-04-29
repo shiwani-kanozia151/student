@@ -132,8 +132,10 @@ const CourseSelection = () => {
     setStep("courses");
   };
 
-  const handleCourseSelect = (courseId: string) => {
-    navigate(`/student/application/${courseId}`);
+  const handleCourseSelect = (course: MappedCourse) => {
+    navigate(`/student/application/${course.id}`, { 
+      state: { courseType: course.category } 
+    });
   };
 
   const handleBackToCategories = () => {
@@ -268,7 +270,7 @@ const CourseSelection = () => {
                     )}
                   </CardContent>
                   <CardFooter className="border-t bg-gray-50 flex justify-end">
-                    <Button onClick={() => handleCourseSelect(course.id)}>
+                    <Button onClick={() => handleCourseSelect(course)}>
                       Apply Now
                     </Button>
                   </CardFooter>

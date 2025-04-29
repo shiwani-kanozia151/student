@@ -1,5 +1,5 @@
 import React from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -31,6 +31,9 @@ interface FormData {
   lastName: string;
   sex: string;
   age: string;
+  dob: string;
+  nationality: string;
+  address: string;
   contactNumber: string;
   parentContactNumber: string;
   fatherName: string;
@@ -52,8 +55,13 @@ interface FormData {
   graduationSchool?: string;
   graduationPercentage?: string;
   graduationDegree?: string;
+  pgSchool?: string;
+  pgPercentage?: string;
+  pgDegree?: string;
+  researchProposal?: string;
   remarks: string;
-  department: string;
+  course_type: "UG" | "PG" | "Research";
+  course_name: string;
 }
 
 interface UploadedDocument {
@@ -61,32 +69,50 @@ interface UploadedDocument {
   file: File | null;
   uploaded: boolean;
   url?: string;
+  required: boolean; 
 }
 
 const ApplicationForm = () => {
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { courseType, courseName } = location.state || { 
+    courseType: "ug", 
+    courseName: "" 
+  };
+  
   const [activeTab, setActiveTab] = React.useState("personal");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState(false);
   const [studentName, setStudentName] = React.useState("");
   const [user, setUser] = React.useState<any>(null);
+
+  const isUG = courseType === "ug";
+  const isPG = courseType === "pg";
+  const isResearch = courseType === "research";
+
   const [documents, setDocuments] = React.useState<Record<string, UploadedDocument>>({
-    tenthMarksheet: { type: "10th Marksheet", file: null, uploaded: false },
-    twelfthMarksheet: { type: "12th Marksheet", file: null, uploaded: false },
-    casteCertificate: { type: "Caste Certificate", file: null, uploaded: false },
-    entranceScoreCard: { type: "Entrance Score Card", file: null, uploaded: false },
-    photo: { type: "Student Photo", file: null, uploaded: false },
-    signature: { type: "Student Signature", file: null, uploaded: false },
+    tenthMarksheet: { type: "10th Marksheet", file: null, uploaded: false, required: true },
+    photo: { type: "Student Photo", file: null, uploaded: false, required: true },
+    signature: { type: "Student Signature", file: null, uploaded: false, required: true },
+    aadharCard: { type: "Aadhar Card", file: null, uploaded: false, required: true },
+    ...(isUG && {
+      twelfthMarksheet: { type: "12th Marksheet", file: null, uploaded: false, required: true },
+      entranceScoreCard: { type: "Entrance Score Card", file: null, uploaded: false, required: true }
+    }),
+    ...(isPG && {
+      twelfthMarksheet: { type: "12th Marksheet", file: null, uploaded: false, required: true },
+      graduationMarksheet: { type: "Graduation Marksheet", file: null, uploaded: false, required: true },
+      pgEntranceScoreCard: { type: "PG Entrance Score Card", file: null, uploaded: false, required: true }
+    }),
+    ...(isResearch && {
+      twelfthMarksheet: { type: "12th Marksheet", file: null, uploaded: false, required: true },
+      graduationMarksheet: { type: "UG Marksheet", file: null, uploaded: false, required: true },
+      pgMarksheet: { type: "PG Marksheet", file: null, uploaded: false, required: true },
+      researchEntranceScore: { type: "Research Entrance Score Card", file: null, uploaded: false, required: true }
+    })
   });
-
-  const isPG = courseId?.startsWith("mtech") || courseId?.startsWith("phd");
-  const courseCategory = isPG ? "PG" : "UG";
-
-  if (isPG) {
-    documents.graduationMarksheet = { type: "Graduation Marksheet", file: null, uploaded: false };
-  }
 
   const [formData, setFormData] = React.useState<FormData>({
     firstName: studentName.split(' ')[0] || '',
@@ -94,6 +120,9 @@ const ApplicationForm = () => {
     lastName: studentName.split(' ').slice(1).join(' ') || '',
     sex: "",
     age: "",
+    dob: "",
+    nationality: "",
+    address: "",
     contactNumber: "",
     parentContactNumber: "",
     fatherName: "",
@@ -115,9 +144,15 @@ const ApplicationForm = () => {
     graduationSchool: "",
     graduationPercentage: "",
     graduationDegree: "",
+    pgSchool: "",
+    pgPercentage: "",
+    pgDegree: "",
+    researchProposal: "",
     remarks: "",
-    department: courseCategory
+    course_type: courseType.toUpperCase() as "UG" | "PG" | "Research",
+    course_name: courseName,
   });
+
 
   React.useEffect(() => {
     const checkExistingApplication = async () => {
@@ -201,17 +236,16 @@ const ApplicationForm = () => {
   };
 
   const uploadFile = async (file: File, path: string) => {
+    await supabase.storage.from("applications").remove([path]);
     const { data, error } = await supabase.storage
       .from("applications")
-      .upload(path, file);
+      .upload(path, file, {
+        upsert: true, // Add this option
+        cacheControl: '3600'
+      });
 
-    if (error) throw error;
-
-    const { data: { publicUrl } } = supabase.storage
-      .from("applications")
-      .getPublicUrl(path);
-
-    return publicUrl;
+      if (error) throw error;
+      return supabase.storage.from("applications").getPublicUrl(path).data.publicUrl;
   };
 
   const handleSubmit = async () => {
@@ -219,20 +253,50 @@ const ApplicationForm = () => {
       setLoading(true);
       setError(null);
   
+      // Common required fields
       const requiredFields = [
+<<<<<<< HEAD
         'firstName', 'lastName', 'sex', 'age', 'contactNumber',
         'fatherName', 'motherName', 'address', 'courseType', 'courseName',
         'tenthSchool', 'tenthPercentage', 'twelfthSchool', 'twelfthPercentage'
+=======
+        'firstName', 'lastName', 'sex', 'age', 'dob', 'nationality', 'address',
+        'contactNumber', 'fatherName', 'motherName', 'tenthSchool', 'tenthPercentage',
+        'course_type', 'course_name'
+>>>>>>> student-portal-changes
       ];
+
+      if (isUG) {
+        requiredFields.push('twelfthSchool', 'twelfthPercentage');
+      }
+      if (isPG) {
+        requiredFields.push('twelfthSchool', 'twelfthPercentage', 'graduationSchool', 'graduationPercentage');
+      }
+      if (isResearch) {
+        requiredFields.push(
+          'twelfthSchool', 'twelfthPercentage',
+          'graduationSchool', 'graduationPercentage',
+          'pgSchool', 'pgPercentage'
+        );
+      }
   
       const missingFields = requiredFields.filter(field => !formData[field]);
       if (missingFields.length > 0) {
         throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
       }
-  
-      // First create application to get ID
+
+      const missingDocuments = Object.entries(documents)
+      .filter(([_, doc]) => doc.file === null)
+      .map(([key, _]) => key);
+    
+       if (missingDocuments.length > 0) {
+         throw new Error(`Missing required documents: ${missingDocuments.join(', ')}`);
+        }
+
+      // Create application payload
       const fullName = `${formData.firstName} ${formData.middleName} ${formData.lastName}`.replace(/\s+/g, ' ').trim();
       
+<<<<<<< HEAD
       const { data: application, error: appError } = await supabase
         .from("applications")
         .insert({
@@ -252,34 +316,72 @@ const ApplicationForm = () => {
             mother_name: formData.motherName,
             father_occupation: formData.fatherOccupation,
             mother_occupation: formData.motherOccupation,
+=======
+      const applicationPayload = {
+        form_data: {},
+        course_type: formData.course_type,
+        student_id: user.id,
+        course_id: courseId,
+        course_name: formData.course_name,
+        personal_details: {
+          name: fullName,
+          sex: formData.sex,
+          age: formData.age,
+          dob: formData.dob,
+          nationality: formData.nationality,
+          address: formData.address,
+          contact_number: formData.contactNumber,
+          parent_contact: formData.parentContactNumber,
+          father_name: formData.fatherName,
+          mother_name: formData.motherName,
+          father_occupation: formData.fatherOccupation,
+          mother_occupation: formData.motherOccupation,
+        },
+        academic_details: {
+          tenth: {
+            school: formData.tenthSchool,
+            percentage: formData.tenthPercentage,
+            board: formData.tenthBoard,
+>>>>>>> student-portal-changes
           },
-          academic_details: {
-            tenth: {
-              school: formData.tenthSchool,
-              percentage: formData.tenthPercentage,
-              board: formData.tenthBoard,
-            },
+          ...(isUG || isPG || isResearch ? {
             twelfth: {
               school: formData.twelfthSchool,
               percentage: formData.twelfthPercentage,
               board: formData.twelfthBoard,
-            },
-            entrance: {
-              exam: formData.entranceExam,
-              score: formData.entranceScore,
-              rank: formData.entranceRank,
-            },
-            ...(isPG && {
-              graduation: {
-                school: formData.graduationSchool,
-                percentage: formData.graduationPercentage,
-                degree: formData.graduationDegree,
-              },
-            }),
+            }
+          } : {}),
+          ...(isPG || isResearch ? {
+            graduation: {
+              school: formData.graduationSchool,
+              percentage: formData.graduationPercentage,
+              degree: formData.graduationDegree,
+            }
+          } : {}),
+          ...(isResearch ? {
+            post_graduation: {
+              school: formData.pgSchool,
+              percentage: formData.pgPercentage,
+              degree: formData.pgDegree,
+            }
+          } : {}),
+          entrance: {
+            exam: formData.entranceExam,
+            score: formData.entranceScore,
+            rank: formData.entranceRank,
           },
-          status: "pending",
-          remarks: formData.remarks
-        })
+          ...(isResearch ? {
+            research_proposal: formData.researchProposal
+          } : {})
+        },
+        status: "pending",
+        remarks: formData.remarks
+      };
+
+      // Submit to Supabase
+      const { data: application, error: appError } = await supabase
+        .from("applications")
+        .insert(applicationPayload)
         .select()
         .single();
 
@@ -292,7 +394,7 @@ const ApplicationForm = () => {
 
       if (appError) throw appError;
 
-      // Upload documents with application reference
+      // Upload documents
       await Promise.all(
         Object.entries(documents)
           .filter(([_, doc]) => doc.file)
@@ -300,7 +402,7 @@ const ApplicationForm = () => {
             const path = `documents/${user.id}/${courseId}/${key}/${doc.file!.name}`;
             const url = await uploadFile(doc.file!, path);
             
-            const { error: docError } = await supabase
+            await supabase
               .from('student_documents')
               .upsert({
                 student_id: user.id,
@@ -310,11 +412,10 @@ const ApplicationForm = () => {
                 name: doc.file!.name,
                 uploaded_at: new Date().toISOString()
               });
-
-            if (docError) throw docError;
           })
       );
 
+<<<<<<< HEAD
       // Update student record
       const { error: studentError } = await supabase
         .from("students")
@@ -340,6 +441,8 @@ const ApplicationForm = () => {
         remarks: 'Application submitted'
       });
 
+=======
+>>>>>>> student-portal-changes
       setSuccess(true);
       toast.success("Application submitted successfully!");
       setTimeout(() => navigate("/student/dashboard"), 2000);
@@ -451,35 +554,108 @@ const ApplicationForm = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="sex">Sex *</Label>
-                    <Select
-                      value={formData.sex}
-                      onValueChange={(value) => handleSelectChange("sex", value)}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="male">Male</SelectItem>
-                        <SelectItem value="female">Female</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="age">Age *</Label>
-                    <Input
-                      id="age"
-                      name="age"
-                      type="number"
-                      value={formData.age}
-                      onChange={handleInputChange}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <Label htmlFor="dob">Date of Birth *</Label>
+        <Input
+          id="dob"
+          name="dob"
+          type="date"
+          value={formData.dob}
+          onChange={handleInputChange}
+          className="mt-1"
+          required
+        />
+      </div>
+      <div>
+        <Label htmlFor="sex">Sex *</Label>
+        <Select
+          value={formData.sex}
+          onValueChange={(value) => handleSelectChange("sex", value)}
+        >
+          <SelectTrigger className="mt-1">
+            <SelectValue placeholder="Select" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="male">Male</SelectItem>
+            <SelectItem value="female">Female</SelectItem>
+            <SelectItem value="other">Other</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label htmlFor="age">Age *</Label>
+        <Input
+          id="age"
+          name="age"
+          type="number"
+          value={formData.age}
+          onChange={handleInputChange}
+          className="mt-1"
+          required
+        />
+      </div>
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <Label htmlFor="nationality">Nationality *</Label>
+        <Input
+          id="nationality"
+          name="nationality"
+          value={formData.nationality}
+          onChange={handleInputChange}
+          className="mt-1"
+          required
+        />
+      </div>
+      
+    </div>
+
+    <div>
+      <Label htmlFor="address">Address *</Label>
+      <Textarea
+        id="address"
+        name="address"
+        value={formData.address}
+        onChange={handleInputChange}
+        className="mt-1"
+        rows={3}
+        required
+      />
+    </div>
+
+                
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <Label htmlFor="course_type">Course Type *</Label>
+      <Select
+        value={formData.course_type}
+        onValueChange={(value) => handleSelectChange("course_type", value as "UG" | "PG" | "Research")}
+      >
+        <SelectTrigger className="mt-1">
+          <SelectValue placeholder="Select course type" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="UG">Undergraduate (UG)</SelectItem>
+          <SelectItem value="PG">Postgraduate (PG)</SelectItem>
+          <SelectItem value="Research">Research</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+    <div>
+      <Label htmlFor="course_name">Course Name *</Label>
+      <Input
+        id="course_name"
+        name="course_name"
+        value={formData.course_name}
+        onChange={handleInputChange}
+        className="mt-1"
+        placeholder="e.g. Computer Science"
+      />
+    </div>
+  </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -674,7 +850,7 @@ const ApplicationForm = () => {
                     </div>
                   </div>
 
-                  {isPG && (
+                  {(isPG || isResearch) && (
                     <div>
                       <h3 className="text-lg font-medium mb-4">
                         Undergraduate Details
@@ -722,6 +898,51 @@ const ApplicationForm = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* PG Details - shown only for Research */}
+          {isResearch && (
+            <div>
+              <h3 className="text-lg font-medium mb-4">
+                Postgraduate Details
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="pgSchool">College Name *</Label>
+                  <Input
+                    id="pgSchool"
+                    name="pgSchool"
+                    value={formData.pgSchool}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="pgPercentage">Percentage/CGPA *</Label>
+                  <Input
+                    id="pgPercentage"
+                    name="pgPercentage"
+                    value={formData.pgPercentage}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="pgDegree">University Name *</Label>
+                  <Input
+                    id="pgDegree"
+                    name="pgDegree"
+                    value={formData.pgDegree}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
 
                   <div>
                     <h3 className="text-lg font-medium mb-4">
@@ -841,6 +1062,26 @@ const ApplicationForm = () => {
                           {formData.sex} / {formData.age}
                         </p>
                       </div>
+                      <div>
+            <p className="text-sm text-gray-500">Date of Birth</p>
+            <p>{formData.dob || "N/A"}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Nationality</p>
+            <p>{formData.nationality || "N/A"}</p>
+          </div>
+          <div className="col-span-2">
+            <p className="text-sm text-gray-500">Address</p>
+            <p>{formData.address || "N/A"}</p>
+          </div>
+                      <div>
+    <p className="text-sm text-gray-500">Course Type</p>
+    <p>{formData.course_type}</p>
+  </div>
+  <div>
+    <p className="text-sm text-gray-500">Course Name</p>
+    <p>{formData.course_name}</p>
+  </div>
                       <div>
                         <p className="text-sm text-gray-500">Contact Number</p>
                         <p>{formData.contactNumber}</p>

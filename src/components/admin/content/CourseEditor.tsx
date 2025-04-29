@@ -16,6 +16,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import CourseEditorManager from "./CourseEditorManager";
 
 // Define valid course types based on your database constraints
 const VALID_COURSE_TYPES = [
@@ -235,6 +236,7 @@ const coursesByCategory = React.useMemo(() => {
           <TabsTrigger value="ug">Undergraduate</TabsTrigger>
           <TabsTrigger value="pg">Postgraduate</TabsTrigger>
           <TabsTrigger value="research">Research</TabsTrigger>
+          <TabsTrigger value="course-editors">Course Editors</TabsTrigger>
         </TabsList>
 
         {Object.entries(categoryMap).map(([category, types]) => (
@@ -388,6 +390,9 @@ const coursesByCategory = React.useMemo(() => {
             </div>
           </TabsContent>
         ))}
+        <TabsContent value="course-editors">
+          <CourseEditorManager />
+        </TabsContent>
       </Tabs>
 
       <Button onClick={handleSave} className="w-full">

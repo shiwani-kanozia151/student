@@ -7,8 +7,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useNavigate } from "react-router-dom";
 import { validateAdminCredentials } from "@/lib/adminAuth";
 
+// In src/types/admin.ts or at the top of AdminLogin.tsx
+type AdminRole = "super" | "content" | "verification";
 interface AdminLoginProps {
-  adminType: "super" | "content" | "verification";
+  adminType: AdminRole;
 }
 
 const AdminLogin = ({ adminType }: AdminLoginProps) => {
@@ -26,20 +28,23 @@ const AdminLogin = ({ adminType }: AdminLoginProps) => {
 
     const user = validateAdminCredentials(email, password);
     if (user) {
-      if (adminType === "super" && user.role === "super") {
+      
+      const userRole = user.role as AdminRole; // Type assertion
+      
+      if (adminType === "super" && userRole === "super") {
         localStorage.setItem("adminEmail", email);
         localStorage.setItem("adminRole", user.role);
         navigate("/admin/select-role");
       } else if (
         adminType === "content" &&
-        (user.role === "content" || user.role === "super")
+        (userRole === "content" || userRole === "super")
       ) {
         localStorage.setItem("adminEmail", email);
         localStorage.setItem("adminRole", "content");
         navigate("/content-admin/dashboard");
       } else if (
         adminType === "verification" &&
-        (user.role === "verification" || user.role === "super")
+        (userRole === "verification" || userRole === "super")
       ) {
         localStorage.setItem("adminEmail", email);
         localStorage.setItem("adminRole", "verification");
@@ -55,13 +60,13 @@ const AdminLogin = ({ adminType }: AdminLoginProps) => {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
-        <h1 className="text-2xl font-bold text-[#0A2240] mb-6">
-          {adminType === "super"
-            ? "Super Administrator Login"
-            : adminType === "content"
-              ? "Content Administrator Login"
-              : "Verification Administrator Login"}
-        </h1>
+      <h1 className="text-2xl font-bold text-[#0A2240] mb-6">
+      {adminType === "super"
+       ? "Super Administrator Login"
+        : adminType === "content"
+        ? "Content Administrator Login"
+        : "Verification Administrator Login"}
+      </h1>
 
         {error && (
           <Alert variant="destructive" className="mb-6">

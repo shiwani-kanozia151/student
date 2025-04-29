@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -11,8 +12,12 @@ import { Label } from "@/components/ui/label";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { signIn, getCurrentUser } from "@/lib/auth";
+<<<<<<< HEAD
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
+=======
+import { toast } from "sonner";
+>>>>>>> student-portal-changes
 
 interface AuthUser {
   id: string;
@@ -26,19 +31,18 @@ interface AuthUser {
 interface StudentLoginModalProps {
   isOpen?: boolean;
   onClose?: () => void;
-  onLogin?: (data: { email: string; name?: string }) => void;
 }
 
 const StudentLoginModal = ({
   isOpen = true,
   onClose = () => {},
-  onLogin = () => {},
 }: StudentLoginModalProps) => {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const navigate = useNavigate();
+<<<<<<< HEAD
 
   const checkApplicationStatus = async (userId: string) => {
     const { data, error } = await supabase
@@ -49,6 +53,8 @@ const StudentLoginModal = ({
 
     return data ? true : false;
   };
+=======
+>>>>>>> student-portal-changes
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +70,7 @@ const StudentLoginModal = ({
       if (response.success) {
         const user = await getCurrentUser() as AuthUser;
         if (user) {
+<<<<<<< HEAD
           // Check if application exists
           const hasApplication = await checkApplicationStatus(user.id);
           
@@ -80,11 +87,23 @@ const StudentLoginModal = ({
             email: user.email || email,
             name: userName
           });
+=======
+          toast.success("Login successful");
+          // Redirect to student dashboard using your defined route
+          navigate("/student/dashboard");
+>>>>>>> student-portal-changes
           onClose();
         }
       }
+<<<<<<< HEAD
     } catch (err: any) {
       setError(err.message || "Login failed. Please try again.");
+=======
+    } catch (err) {
+      console.error("Login error:", err);
+      setError(err instanceof Error ? err.message : "Login failed. Please try again.");
+      toast.error("Login failed");
+>>>>>>> student-portal-changes
     } finally {
       setLoading(false);
     }
@@ -116,6 +135,7 @@ const StudentLoginModal = ({
               placeholder="Enter your email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
             />
           </div>
 
@@ -127,6 +147,7 @@ const StudentLoginModal = ({
               placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
             />
           </div>
 
