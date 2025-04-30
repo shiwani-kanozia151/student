@@ -173,15 +173,21 @@ const VerificationAdmin = () => {
         try {
           const { data, error } = await supabase
             .from('courses')
-            .select('id, name');
-            
-          if (error) throw error;
+            .select('id, name')
+            .order('name', { ascending: true });
           
+          if (error) {
+            console.error("Supabase error:", error);
+            throw error;
+          }
+      
           if (data && data.length > 0) {
-            // Add "All Courses" option at the beginning
-            const allCoursesOption = { id: "all", name: "All Courses" };
-            setCourses([allCoursesOption, ...data]);
+            setCourses([{ id: "all", name: "All Courses" }, ...data]);
             setAvailableCourses(data);
+            if (!selectedCourse) setSelectedCourse(data[0].id);
+          } else {
+            toast.warning("No courses found in database");
+            console.warn("Courses table is empty");
           }
         } catch (err) {
           console.error('Error fetching courses:', err);
@@ -270,7 +276,7 @@ const VerificationAdmin = () => {
       try {
         setLoading(true);
         setError(null);
-
+    
         // Check if user is a verification officer (using localStorage)
         const isVerificationOfficer = localStorage.getItem('verificationOfficerEmail') !== null;
         const verificationOfficerEmail = localStorage.getItem('verificationOfficerEmail');
@@ -285,8 +291,8 @@ const VerificationAdmin = () => {
           setLoading(false);
           return;
         }
-
-        // Now do the real query with the necessary joins
+    
+        // Base query with all necessary joins
         let query = supabase
           .from("students")
           .select(`
@@ -314,30 +320,25 @@ const VerificationAdmin = () => {
             )
           `)
           .order("created_at", { ascending: false });
-
-        // If this is a verification admin, they can see ALL students across ALL courses
-        // If it's a verification officer, filter by their assigned course
+    
+        // For verification admins
         if (isVerificationAdmin) {
-          // For verification admins, only filter by course if a specific course is selected
-          // and it's not the "All Courses" option
           if (selectedCourse && selectedCourse !== "all") {
-            console.log(`Admin filtering for specific course ID: ${selectedCourse}`);
-            query = query.eq("applications.course_id", selectedCourse);
-          } else {
-            console.log("Admin viewing all courses");
+            // Only show students who have specifically selected this course
+            query = query.not('applications.course_id', 'is', null)
+                        .eq('applications.course_id', selectedCourse);
           }
-        } else if (isVerificationOfficer && verificationOfficerCourseId) {
-          // For verification officers, always filter by their assigned course
-          console.log(`Officer filtering for assigned course: ${verificationOfficerCourseId}`);
-          query = query.eq("applications.course_id", verificationOfficerCourseId);
-          
+          // For "All Courses", no additional filtering needed
+        } 
+        // For verification officers
+        else if (isVerificationOfficer && verificationOfficerCourseId) {
           // First, get the verification officer's ID
           const { data: officerData, error: officerError } = await supabase
             .from("verification_admins")
             .select("id")
             .eq("email", verificationOfficerEmail)
             .single();
-
+    
           if (officerError) {
             throw new Error(`Failed to get verification officer details: ${officerError.message}`);
           }
@@ -345,44 +346,62 @@ const VerificationAdmin = () => {
           if (!officerData || !officerData.id) {
             throw new Error("Verification officer ID not found");
           }
-
+    
           // Get assigned students for this officer
           const { data: assignedStudents, error: assignmentError } = await supabase
             .from("student_assignments")
             .select("student_id")
             .eq("verification_officer_id", officerData.id)
             .eq("course_id", verificationOfficerCourseId);
-
+    
           if (assignmentError && !assignmentError.message.includes("does not exist")) {
             throw new Error(`Error fetching student assignments: ${assignmentError.message}`);
           }
-
+    
           // Create an array of student IDs assigned to this officer
           const assignedStudentIds = (assignedStudents || []).map(assignment => assignment.student_id);
-
+    
           // If we have assigned students, only get those specific students
           if (assignedStudents && assignedStudents.length > 0) {
-            console.log(`Filtering for ${assignedStudentIds.length} assigned students`);
             query = query.in("id", assignedStudentIds);
           }
+          
+          // Always filter by the officer's course
+          query = query.not('applications.course_id', 'is', null)
+                      .eq('applications.course_id', verificationOfficerCourseId);
         }
-
+    
         const { data: studentsData, error: studentsError } = await query;
-
+    
         if (studentsError) {
           console.error("Error fetching students data:", studentsError);
           throw studentsError;
         }
         
         console.log(`Query returned ${studentsData?.length || 0} student records`);
-
-        // Process students with less filtering
+    
+        // Process students with validation
         const validatedStudents = (studentsData || [])
           .map(student => validateStudent(student))
           .filter(Boolean) as Student[];
-
+    
         console.log(`Filtered to ${validatedStudents.length} valid students`);
-        setStudents(validatedStudents);
+    
+        // Additional client-side filtering for course selection
+        let finalStudents = validatedStudents;
+        
+        // For verification admin in "All Courses" mode, show all students
+        if (isVerificationAdmin && selectedCourse === "all") {
+          // No additional filtering needed
+        } 
+        // For specific course selection, ensure we only show students with that course
+        else if (selectedCourse && selectedCourse !== "all") {
+          finalStudents = validatedStudents.filter(student => 
+            student.course_id === selectedCourse
+          );
+        }
+    
+        setStudents(finalStudents);
       } catch (err) {
         console.error("Error fetching students:", err);
         setError(err instanceof Error ? err.message : "Failed to load students");
@@ -764,6 +783,8 @@ const VerificationAdmin = () => {
                 <SelectValue placeholder="Select a course" />
               </SelectTrigger>
               <SelectContent>
+             
+
                 {courses.map(course => (
                   <SelectItem key={course.id} value={course.id}>
                     {course.name}
@@ -778,7 +799,7 @@ const VerificationAdmin = () => {
           <>
             <div>
               <h2 className="text-2xl font-bold">
-                Manage student applications for {courses.find(c => c.id === selectedCourse)?.name}
+                Manage student applications for {courses.find(c => c.id === selectedCourse)?.name || "All Courses"}
               </h2>
             </div>
 
