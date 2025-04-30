@@ -173,15 +173,21 @@ const VerificationAdmin = () => {
         try {
           const { data, error } = await supabase
             .from('courses')
-            .select('id, name');
-            
-          if (error) throw error;
+            .select('id, name')
+            .order('name', { ascending: true });
           
+          if (error) {
+            console.error("Supabase error:", error);
+            throw error;
+          }
+      
           if (data && data.length > 0) {
-            // Add "All Courses" option at the beginning
-            const allCoursesOption = { id: "all", name: "All Courses" };
-            setCourses([allCoursesOption, ...data]);
+            setCourses([{ id: "all", name: "All Courses" }, ...data]);
             setAvailableCourses(data);
+            if (!selectedCourse) setSelectedCourse(data[0].id);
+          } else {
+            toast.warning("No courses found in database");
+            console.warn("Courses table is empty");
           }
         } catch (err) {
           console.error('Error fetching courses:', err);
@@ -270,121 +276,58 @@ const VerificationAdmin = () => {
       try {
         setLoading(true);
         setError(null);
-
-        // Check if user is a verification officer (using localStorage)
-        const isVerificationOfficer = localStorage.getItem('verificationOfficerEmail') !== null;
-        const verificationOfficerEmail = localStorage.getItem('verificationOfficerEmail');
-        const verificationOfficerCourseId = localStorage.getItem('verificationOfficerCourseId');
-        
-        // Log the current mode and course information
-        console.log("Verification mode:", isVerificationAdmin ? "Admin" : "Officer");
-        console.log("Course ID filter:", selectedCourse || verificationOfficerCourseId || "None");
-        
-        if (!selectedCourse && !verificationOfficerCourseId) {
-          setStudents([]);
-          setLoading(false);
-          return;
-        }
-
-        // Now do the real query with the necessary joins
-        let query = supabase
+    
+        // First get all students with their applications
+        let { data: studentsData, error } = await supabase
           .from("students")
           .select(`
             *,
-            student_documents!student_id(
+            student_documents(*),
+            applications(
               id,
-              type,
-              url,
-              name,
-              uploaded_at,
-              application_id
-            ),
-            applications!left(
-              id,
+              course_id,
+              course_name,
+              course_type,
+              status,
               personal_details,
               academic_details,
-              course_id,
-              course_type,
-              course_name,
-              status,
-              remarks,
               status_history,
-              document_verification,
-              created_at
+              document_verification
             )
-          `)
-          .order("created_at", { ascending: false });
-
-        // If this is a verification admin, they can see ALL students across ALL courses
-        // If it's a verification officer, filter by their assigned course
-        if (isVerificationAdmin) {
-          // For verification admins, only filter by course if a specific course is selected
-          // and it's not the "All Courses" option
-          if (selectedCourse && selectedCourse !== "all") {
-            console.log(`Admin filtering for specific course ID: ${selectedCourse}`);
-            query = query.eq("applications.course_id", selectedCourse);
-          } else {
-            console.log("Admin viewing all courses");
-          }
-        } else if (isVerificationOfficer && verificationOfficerCourseId) {
-          // For verification officers, always filter by their assigned course
-          console.log(`Officer filtering for assigned course: ${verificationOfficerCourseId}`);
-          query = query.eq("applications.course_id", verificationOfficerCourseId);
-          
-          // First, get the verification officer's ID
-          const { data: officerData, error: officerError } = await supabase
-            .from("verification_admins")
-            .select("id")
-            .eq("email", verificationOfficerEmail)
-            .single();
-
-          if (officerError) {
-            throw new Error(`Failed to get verification officer details: ${officerError.message}`);
-          }
-          
-          if (!officerData || !officerData.id) {
-            throw new Error("Verification officer ID not found");
-          }
-
-          // Get assigned students for this officer
-          const { data: assignedStudents, error: assignmentError } = await supabase
-            .from("student_assignments")
-            .select("student_id")
-            .eq("verification_officer_id", officerData.id)
-            .eq("course_id", verificationOfficerCourseId);
-
-          if (assignmentError && !assignmentError.message.includes("does not exist")) {
-            throw new Error(`Error fetching student assignments: ${assignmentError.message}`);
-          }
-
-          // Create an array of student IDs assigned to this officer
-          const assignedStudentIds = (assignedStudents || []).map(assignment => assignment.student_id);
-
-          // If we have assigned students, only get those specific students
-          if (assignedStudents && assignedStudents.length > 0) {
-            console.log(`Filtering for ${assignedStudentIds.length} assigned students`);
-            query = query.in("id", assignedStudentIds);
-          }
-        }
-
-        const { data: studentsData, error: studentsError } = await query;
-
-        if (studentsError) {
-          console.error("Error fetching students data:", studentsError);
-          throw studentsError;
-        }
-        
-        console.log(`Query returned ${studentsData?.length || 0} student records`);
-
-        // Process students with less filtering
+          `);
+    
+        if (error) throw error;
+    
+        // Filter in JavaScript if needed
         const validatedStudents = (studentsData || [])
-          .map(student => validateStudent(student))
-          .filter(Boolean) as Student[];
-
-        console.log(`Filtered to ${validatedStudents.length} valid students`);
+          .filter(student => 
+            selectedCourse === "all" || 
+            student.course_id === selectedCourse || 
+            student.applications?.some(app => app.course_id === selectedCourse)
+          )
+          .map(student => ({
+            id: student.id,
+            name: student.name || "N/A",
+            email: student.email,
+            created_at: student.created_at,
+            status: student.status || "pending",
+            course_id: student.course_id || student.applications?.[0]?.course_id,
+            course_name: student.course_name || student.applications?.[0]?.course_name,
+            course_type: student.course_type || student.applications?.[0]?.course_type,
+            documents: student.student_documents || [],
+            is_verified: student.is_verified || false,
+            document_verification: student.document_verification || student.applications?.[0]?.document_verification,
+            personal_details: student.personal_details || student.applications?.[0]?.personal_details || {},
+            academic_details: student.academic_details || student.applications?.[0]?.academic_details || {},
+            status_history: student.status_history || student.applications?.[0]?.status_history || []
+          }))
+          .filter(student => student.id); // Filter out any invalid entries
+    
+        console.log("Processed students:", validatedStudents);
         setStudents(validatedStudents);
+    
       } catch (err) {
-        console.error("Error fetching students:", err);
+        console.error("Error in fetchStudents:", err);
         setError(err instanceof Error ? err.message : "Failed to load students");
         toast.error("Failed to load students");
       } finally {
@@ -393,43 +336,10 @@ const VerificationAdmin = () => {
     };
 
     React.useEffect(() => {
-      if (verificationAdminCourseId || isVerificationAdmin) {
+      if (selectedCourse) {
         fetchStudents();
-        
-        // Set up real-time subscriptions for database changes
-        const channel = supabase
-          .channel("students_changes")
-          .on(
-            "postgres_changes",
-            { 
-              event: "*", 
-              schema: "public", 
-              table: "students" 
-            },
-            fetchStudents
-          )
-          .subscribe();
-
-        const applicationsChannel = supabase
-          .channel("applications_changes")
-          .on(
-            "postgres_changes",
-            { 
-              event: "*", 
-              schema: "public", 
-              table: "applications" 
-            },
-            fetchStudents
-          )
-          .subscribe();
-        
-        // Cleanup function to remove channel subscriptions on unmount
-        return () => {
-          supabase.removeChannel(channel);
-          supabase.removeChannel(applicationsChannel);
-        };
       }
-    }, [verificationAdminCourseId]);
+    }, [selectedCourse]);
 
     const handleStatusUpdate = async (status: "pending" | "approved" | "rejected") => {
       if (!selectedStudent) return;
@@ -743,11 +653,10 @@ const VerificationAdmin = () => {
     fetchStudents();
   };
 
-  React.useEffect(() => {
-    if (selectedCourse) {
-      fetchStudents();
-    }
-  }, [selectedCourse]);
+  const handleCourseSelect = (courseId: string) => {
+    console.log("Selected course:", courseId);
+    setSelectedCourse(courseId);
+  };
 
   return (
     <div className="space-y-6">
@@ -758,7 +667,7 @@ const VerificationAdmin = () => {
           <div className="flex gap-4 mt-2">
             <Select
               value={selectedCourse || ""}
-              onValueChange={setSelectedCourse}
+              onValueChange={handleCourseSelect}
             >
               <SelectTrigger className="w-[300px]">
                 <SelectValue placeholder="Select a course" />
