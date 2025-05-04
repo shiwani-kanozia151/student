@@ -4,13 +4,33 @@ import AboutUsEditor from "./content/AboutUsEditor";
 import NewsEditor from "./content/NewsEditor";
 import AcademicEditor from "./content/AcademicEditor";
 import AdministrationEditor from "./content/AdministrationEditor";
-
 import CourseEditor from "./content/CourseEditor";
 import NavbarEditor from "./content/NavbarEditor";
 import CourseEditorManager from "./content/CourseEditorManager";
 import { supabase } from "@/lib/supabase";
 
-// Add type declarations for the component props
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("ErrorBoundary caught:", error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <div className="text-red-500 p-4">Error loading component</div>;
+    }
+    return this.props.children;
+  }
+}
+
 interface NewsEditorProps {
   initialNews: any[];
 }
@@ -27,7 +47,6 @@ interface NavbarEditorProps {
   initialNavItems: any;
 }
 
-// Type cast the imported components
 const TypedNewsEditor = NewsEditor as React.ComponentType<NewsEditorProps>;
 const TypedAcademicEditor = AcademicEditor as React.ComponentType<AcademicEditorProps>;
 const TypedAboutUsEditor = AboutUsEditor as React.ComponentType<AboutUsEditorProps>;
@@ -41,38 +60,38 @@ const ContentAdmin = () => {
     content: any[];
   }>({ courses: [], content: [] });
 
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data: coursesData, error: coursesError } = await supabase
+        .from('courses')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      const { data: contentData, error: contentError } = await supabase
+        .from('content')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (coursesError) throw coursesError;
+      if (contentError) throw contentError;
+
+      setData({
+        courses: coursesData || [],
+        content: contentData || [],
+      });
+    } catch (err: any) {
+      console.error('Error fetching data:', err);
+      setError(err.message);
+      setData({ courses: [], content: [] });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   React.useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const [coursesResponse, contentResponse] = await Promise.all([
-          supabase
-            .from("courses")
-            .select("*")
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("content")
-            .select("*")
-            .order("created_at", { ascending: false }),
-        ]);
-
-        if (coursesResponse.error) throw coursesResponse.error;
-        if (contentResponse.error) throw contentResponse.error;
-
-        setData({
-          courses: coursesResponse.data || [],
-          content: contentResponse.data || [],
-        });
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, []);
 
@@ -88,9 +107,7 @@ const ContentAdmin = () => {
     <div className="min-h-screen bg-gray-100 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-[#0A2240]">
-            Content Management
-          </h1>
+          <h1 className="text-2xl font-bold text-[#0A2240]">Content Management</h1>
         </div>
 
         {error && (
@@ -133,7 +150,13 @@ const ContentAdmin = () => {
           </TabsContent>
 
           <TabsContent value="courses" className="mt-0">
-            <CourseEditor initialCourses={data.courses} />
+            <ErrorBoundary>
+              {data.courses?.length > 0 ? (
+                <CourseEditor initialCourses={data.courses} />
+              ) : (
+                <div className="text-gray-500 p-4">No courses available</div>
+              )}
+            </ErrorBoundary>
           </TabsContent>
           
           <TabsContent value="course-editors" className="mt-0">

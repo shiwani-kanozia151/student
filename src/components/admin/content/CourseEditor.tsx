@@ -18,21 +18,19 @@ import {
 } from "@/components/ui/tabs";
 import CourseEditorManager from "./CourseEditorManager";
 
-// Define valid course types based on your database constraints
 const VALID_COURSE_TYPES = [
-  'btech',
-  'bsc_bed',
-  'mtech',
-  'mca',
-  'ma',
-  'msc',
-  'mba',
-  'phd',
-  'ms_research'
+  'btech', 'bsc_bed', 'mtech', 'mca', 'ma', 
+  'msc', 'mba', 'phd', 'ms_research'
 ] as const;
 
 type CourseType = typeof VALID_COURSE_TYPES[number];
 type CourseCategory = "ug" | "pg" | "research";
+
+interface CurriculumItem {
+  year?: string;
+  subjects?: string[] | string;
+  [key: string]: any;
+}
 
 interface Course {
   id: string;
@@ -40,7 +38,7 @@ interface Course {
   name: string;
   description: string;
   duration: string;
-  curriculum?: string[];
+  curriculum?: string[] | CurriculumItem | string | null;
   eligibility?: string;
   category?: CourseCategory;
 }
@@ -49,52 +47,104 @@ interface CourseEditorProps {
   initialCourses?: Course[];
 }
 
-const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
-  // Helper to get category from type
+const CurriculumRenderer = ({ curriculum }: { curriculum: any }) => {
+  if (!curriculum) return null;
+
+  let parsedCurriculum = curriculum;
+  if (typeof curriculum === 'string') {
+    try {
+      parsedCurriculum = JSON.parse(curriculum);
+    } catch {
+      return <div className="text-sm text-gray-500">{curriculum}</div>;
+    }
+  }
+
+  if (Array.isArray(parsedCurriculum)) {
+    return (
+      <ul className="list-disc pl-5 mt-1">
+        {parsedCurriculum.map((item, i) => (
+          <li key={i} className="text-sm">
+            {typeof item === 'string' ? item : JSON.stringify(item)}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  if (typeof parsedCurriculum === 'object' && parsedCurriculum !== null) {
+    return (
+      <ul className="list-disc pl-5 mt-1">
+        {Object.entries(parsedCurriculum).map(([key, value]) => (
+          <li key={key} className="text-sm">
+            <strong>{key}:</strong> {Array.isArray(value) 
+              ? value.join(', ') 
+              : typeof value === 'object' 
+                ? JSON.stringify(value) 
+                : String(value)}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <div className="text-sm text-gray-500">
+      {JSON.stringify(parsedCurriculum)}
+    </div>
+  );
+};
+
+const CourseEditor = ({ initialCourses = [] }: CourseEditorProps) => {
   const getCategoryFromType = (type: CourseType): CourseCategory => {
     if (['btech', 'bsc_bed'].includes(type)) return 'ug';
     if (['phd', 'ms_research'].includes(type)) return 'research';
     return 'pg';
   };
 
-  // Helper to get display name
   const getTypeDisplayName = (type: CourseType): string => {
     const typeMap: Record<CourseType, string> = {
-      "btech": "B.Tech",
-      "bsc_bed": "B.Sc B.Ed",
-      "mtech": "M.Tech",
-      "mca": "MCA",
-      "ma": "MA",
-      "msc": "M.Sc",
-      "mba": "MBA",
-      "phd": "Ph.D",
-      "ms_research": "M.S. (Research)"
+      "btech": "B.Tech", "bsc_bed": "B.Sc B.Ed", "mtech": "M.Tech",
+      "mca": "MCA", "ma": "MA", "msc": "M.Sc", "mba": "MBA",
+      "phd": "Ph.D", "ms_research": "M.S. (Research)"
     };
     return typeMap[type];
   };
 
-  // Initialize courses with proper types and categories
-  const processedCourses = (
-    initialCourses || [
-      {
-        id: "1",
-        type: "btech",
-        name: "Computer Science and Engineering",
-        description: "B.Tech program in Computer Science and Engineering",
-        duration: "4 years",
-        curriculum: [
-          "First Year: Basic Sciences and Engineering",
-          "Second Year: Core Subjects",
-          "Third Year: Specializations",
-          "Fourth Year: Projects and Electives"
-        ],
-        eligibility: "10+2 with Physics, Chemistry, and Mathematics"
+  const normalizeCurriculum = (curriculum: any) => {
+    if (!curriculum) return null;
+    if (Array.isArray(curriculum)) return curriculum;
+    if (typeof curriculum === 'object') return curriculum;
+    if (typeof curriculum === 'string') {
+      try {
+        return JSON.parse(curriculum);
+      } catch {
+        return curriculum;
       }
-    ]
-  ).map((course) => ({
+    }
+    return null;
+  };
+
+  const processedCourses = initialCourses.length > 0 ? initialCourses.map(course => ({
     ...course,
-    category: getCategoryFromType(course.type)
-  }));
+    curriculum: normalizeCurriculum(course.curriculum),
+    category: course.category || getCategoryFromType(course.type)
+  })) : [
+    {
+      id: "1",
+      type: "btech",
+      name: "Computer Science and Engineering",
+      description: "B.Tech program in Computer Science and Engineering",
+      duration: "4 years",
+      curriculum: [
+        "First Year: Basic Sciences and Engineering",
+        "Second Year: Core Subjects",
+        "Third Year: Specializations",
+        "Fourth Year: Projects and Electives"
+      ],
+      eligibility: "10+2 with Physics, Chemistry, and Mathematics",
+      category: "ug"
+    }
+  ];
 
   const [courses, setCourses] = React.useState<Course[]>(processedCourses);
   const [activeCategory, setActiveCategory] = React.useState<CourseCategory>("ug");
@@ -109,7 +159,6 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
     category: "ug"
   });
 
-  // Map course types to categories
   const categoryMap: Record<CourseCategory, CourseType[]> = {
     ug: ["btech", "bsc_bed"],
     pg: ["mtech", "mca", "ma", "msc", "mba"],
@@ -143,7 +192,6 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
       curriculum: newCourse.curriculum || []
     }]);
     
-    // Reset form but keep current category
     setNewCourse({
       type: categoryMap[activeCategory][0],
       name: "",
@@ -162,68 +210,54 @@ const CourseEditor = ({ initialCourses }: CourseEditorProps) => {
 
   const handleSave = async () => {
     try {
-      // Validate all courses before saving
       const invalidCourses = courses.filter(
         course => !VALID_COURSE_TYPES.includes(course.type)
       );
       
       if (invalidCourses.length > 0) {
-        const invalidTypes = invalidCourses.map(c => c.type).join(", ");
-        throw new Error(`Invalid course types found: ${invalidTypes}`);
+        throw new Error(`Invalid course types: ${
+          invalidCourses.map(c => c.type).join(", ")
+        }`);
       }
 
-      // Delete existing courses
-      const { data: existingCourses, error: fetchError } = await supabase
-        .from("courses")
-        .select("id");
+      const { error: deleteError } = await supabase
+        .from('courses')
+        .delete()
+        .neq('id', '');
 
-      if (fetchError) throw fetchError;
+      if (deleteError) throw deleteError;
 
-      for (const course of existingCourses || []) {
-        const { error: deleteError } = await supabase
-          .from("courses")
-          .delete()
-          .eq("id", course.id);
-        if (deleteError) throw deleteError;
-      }
-
-      // Insert current courses
-      for (const course of courses) {
-        const { error } = await supabase.from("courses").insert({
+      const { error: insertError } = await supabase
+        .from('courses')
+        .insert(courses.map(course => ({
           id: course.id,
           name: course.name,
           type: course.type,
           description: course.description,
           duration: course.duration,
-          curriculum: course.curriculum || [],
-          eligibility: course.eligibility || ""
-        });
+          curriculum: course.curriculum || null,
+          eligibility: course.eligibility || null
+        })));
 
-        if (error) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
+      if (insertError) throw insertError;
 
       alert("Courses saved successfully!");
       window.location.reload();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error saving courses:", err);
       alert(`Error saving courses: ${err.message}`);
     }
   };
 
-  // Group courses by category and type
-  // Change this line (around line 218):
-const coursesByCategory = React.useMemo(() => {
-  return courses.reduce((acc, course) => {
-    const category = course.category || getCategoryFromType(course.type);
-    
-    if (!acc[category]) acc[category] = {};
-    if (!acc[category][course.type]) acc[category][course.type] = [];
-    
-    acc[category][course.type].push(course);
-    return acc;
-  }, {} as Record<CourseCategory, Partial<Record<CourseType, Course[]>>>); // Updated type
-}, [courses]);
+  const coursesByCategory = React.useMemo(() => {
+    return courses.reduce((acc, course) => {
+      const category = course.category || getCategoryFromType(course.type);
+      if (!acc[category]) acc[category] = {};
+      if (!acc[category][course.type]) acc[category][course.type] = [];
+      acc[category][course.type].push(course);
+      return acc;
+    }, {} as Record<CourseCategory, Partial<Record<CourseType, Course[]>>>);
+  }, [courses]);
 
   return (
     <div className="space-y-6 bg-white p-6 rounded-lg shadow-md">
@@ -361,14 +395,12 @@ const coursesByCategory = React.useMemo(() => {
                                 {course.eligibility && (
                                   <p className="text-sm text-gray-500">Eligibility: {course.eligibility}</p>
                                 )}
-                                {course.curriculum?.length > 0 && (
+                                {course.curriculum && (
                                   <details className="text-sm text-gray-500">
                                     <summary className="cursor-pointer">View Curriculum</summary>
-                                    <ul className="list-disc pl-5 mt-1">
-                                      {course.curriculum.map((item, i) => (
-                                        <li key={i}>{item}</li>
-                                      ))}
-                                    </ul>
+                                    <div className="mt-2">
+                                      <CurriculumRenderer curriculum={course.curriculum} />
+                                    </div>
                                   </details>
                                 )}
                               </div>
